@@ -1,0 +1,43 @@
+{% extends "admin/base.html" %}
+{% set active_page = "api" %}
+{% block title %}API Access — Legion Admin{% endblock %}
+
+{% block content %}
+<h2 class="mb-3">API Access</h2>
+
+<p class="text-muted">Tempus and Munus read the roster from this read-only JSON API. Every request must send the shared key in the <code>X-API-Key</code> header.</p>
+
+<div class="card mb-4" style="max-width: 720px;">
+  <div class="card-header"><i class="bi bi-key me-1"></i> API Key</div>
+  <div class="card-body">
+    {% if api_enabled %}
+    <p class="mb-2"><span class="badge bg-success">Enabled</span></p>
+    <div class="input-group mb-2">
+      <input type="text" class="form-control font-monospace" value="{{ api_key }}" readonly>
+    </div>
+    <p class="text-muted small mb-0">Set via the <code>LEGION_API_KEY</code> environment variable. Rotate it there and restart to change it.</p>
+    {% else %}
+    <p class="mb-1"><span class="badge bg-warning text-dark">Disabled</span></p>
+    <p class="text-muted small mb-0">No <code>LEGION_API_KEY</code> is configured, so the API returns <code>503</code>. Set it in <code>.env</code> and restart to enable roster syncing.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card" style="max-width: 720px;">
+  <div class="card-header"><i class="bi bi-plug me-1"></i> Endpoints</div>
+  <div class="card-body">
+    <table class="table table-sm mb-3">
+      <thead class="table-light"><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>GET</td><td><code>/api/members</code></td><td>List members. Filters: <code>role</code>, <code>team_number</code>, <code>active</code>, <code>updated_since</code></td></tr>
+        <tr><td>GET</td><td><code>/api/members/{member_code}</code></td><td>One member by canonical code</td></tr>
+        <tr><td>GET</td><td><code>/api/teams</code></td><td>All teams</td></tr>
+        <tr><td>GET</td><td><code>/api/focus-groups</code></td><td>All focus groups</td></tr>
+      </tbody>
+    </table>
+    <p class="text-muted small mb-1"><strong>Example:</strong></p>
+    <pre class="bg-dark text-light p-2 rounded small mb-0">curl -H "X-API-Key: &lt;key&gt;" \
+  "https://&lt;host&gt;/api/members?role=student&amp;active=true"</pre>
+  </div>
+</div>
+{% endblock %}

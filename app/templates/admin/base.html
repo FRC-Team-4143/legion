@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Admin — Legion{% endblock %}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    body { background: #0a0a0a; }
+    .sidebar { min-height: 100vh; background: #111111; border-right: 1px solid #2a1a1a; --bs-offcanvas-width: 260px; --bs-offcanvas-bg: #111111; }
+    .sidebar .nav-link { color: #9a7878; }
+    .sidebar .nav-link:hover, .sidebar .nav-link.active { color: #f0e8e8; background: rgba(204,34,0,.18); border-radius: 6px; }
+    .sidebar .nav-link.active { color: #fff; }
+    .sidebar-brand { color: #cc2200; font-weight: 700; font-size: 1.1rem; }
+    /* Retheme Bootstrap primary to the shared kiosk red */
+    :root, [data-bs-theme="dark"] {
+      --bs-primary: #cc2200;
+      --bs-primary-rgb: 204, 34, 0;
+      --bs-link-color: #e05540;
+      --bs-link-color-rgb: 224, 85, 64;
+      --bs-link-hover-color: #ff6644;
+      --bs-focus-ring-color: rgba(204, 34, 0, 0.25);
+    }
+    .btn-primary {
+      --bs-btn-bg: #cc2200;
+      --bs-btn-border-color: #cc2200;
+      --bs-btn-hover-bg: #aa1c00;
+      --bs-btn-hover-border-color: #aa1c00;
+      --bs-btn-active-bg: #991900;
+      --bs-btn-active-border-color: #991900;
+      --bs-btn-focus-shadow-rgb: 204, 34, 0;
+    }
+    .btn-outline-primary {
+      --bs-btn-color: #e05540;
+      --bs-btn-border-color: #cc2200;
+      --bs-btn-hover-bg: #cc2200;
+      --bs-btn-hover-border-color: #cc2200;
+      --bs-btn-hover-color: #fff;
+      --bs-btn-active-bg: #cc2200;
+      --bs-btn-active-border-color: #cc2200;
+      --bs-btn-active-color: #fff;
+      --bs-btn-focus-shadow-rgb: 204, 34, 0;
+    }
+    /* Cards — match kiosk panel style */
+    .card {
+      background: #111111;
+      border: 1px solid #2a1a1a;
+      border-radius: 10px;
+      box-shadow: none !important;
+    }
+    .card-header {
+      background: #1a0f0f;
+      border-bottom: 1px solid #2a1a1a;
+      color: #cc2200;
+      font-weight: 600;
+    }
+    .card-body { background: #111111; }
+    /* Tables — match kiosk row style */
+    .table {
+      --bs-table-bg: transparent;
+      --bs-table-striped-bg: transparent;
+      --bs-table-hover-bg: #1a0f0f;
+      --bs-table-border-color: #1e1010;
+      --bs-table-color: #fff;
+      color: #fff;
+    }
+    .table thead th, .table-light {
+      background: #1a0f0f !important;
+      color: #9a7878 !important;
+      border-color: #2a1a1a !important;
+      font-size: 0.8rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .table > :not(caption) > * > * { border-bottom-color: #1e1010; }
+    .text-muted { color: #9a7878 !important; }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+<!-- Mobile top bar (hamburger opens the sidebar drawer) -->
+<nav class="navbar d-md-none px-3 py-2" style="background:#111111; border-bottom:1px solid #2a1a1a;">
+  <div class="d-flex align-items-center gap-2">
+    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar" aria-controls="sidebar" aria-label="Menu">
+      <i class="bi bi-list"></i>
+    </button>
+    <a class="sidebar-brand" href="/admin"><i>Legion</i></a>
+  </div>
+</nav>
+
+<div class="container-fluid">
+  <div class="row">
+    <!-- Sidebar: off-canvas drawer on mobile, static column on desktop -->
+    <nav id="sidebar" class="col-md-2 sidebar px-3 py-4 offcanvas-md offcanvas-start" tabindex="-1" aria-labelledby="sidebarLabel">
+      <div class="offcanvas-header px-0 d-md-none">
+        <a class="sidebar-brand" id="sidebarLabel" href="/admin"><i>Legion</i></a>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#sidebar" aria-label="Close"></button>
+      </div>
+      <a class="sidebar-brand d-none d-md-block mb-4" href="/admin"><i>Legion</i></a>
+      <ul class="nav flex-column gap-1">
+        <li class="nav-item"><a class="nav-link {% if active_page == 'dashboard' %}active{% endif %}" href="/admin"><i class="bi bi-speedometer2 me-2"></i>Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link {% if active_page == 'members' %}active{% endif %}" href="/admin/members"><i class="bi bi-people me-2"></i>Members</a></li>
+        <li class="nav-item"><a class="nav-link {% if active_page == 'teams' %}active{% endif %}" href="/admin/teams"><i class="bi bi-flag me-2"></i>Teams</a></li>
+        <li class="nav-item"><a class="nav-link {% if active_page == 'focus' %}active{% endif %}" href="/admin/focus-groups"><i class="bi bi-diagram-3 me-2"></i>Focus Groups</a></li>
+        <li class="nav-item"><a class="nav-link {% if active_page == 'import' %}active{% endif %}" href="/admin/import"><i class="bi bi-upload me-2"></i>Import</a></li>
+        <li class="nav-item"><a class="nav-link {% if active_page == 'api' %}active{% endif %}" href="/admin/api"><i class="bi bi-plug me-2"></i>API Access</a></li>
+        <li class="nav-item"><a class="nav-link {% if active_page == 'audit' %}active{% endif %}" href="/admin/audit"><i class="bi bi-journal-text me-2"></i>Audit Log</a></li>
+        <li class="nav-item"><a class="nav-link {% if active_page == 'backup' %}active{% endif %}" href="/admin/backup"><i class="bi bi-database-down me-2"></i>Backup</a></li>
+        <li class="nav-item mt-4"><a class="nav-link text-danger" href="/admin/logout"><i class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
+      </ul>
+    </nav>
+
+    <!-- Main content -->
+    <main class="col-md-10 ms-sm-auto px-4 py-4">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

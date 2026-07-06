@@ -1,0 +1,59 @@
+{% extends "admin/base.html" %}
+{% set active_page = "dashboard" %}
+{% block title %}Dashboard — Legion Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0">Dashboard</h2>
+</div>
+
+<p class="text-muted">Legion is the shared source of truth for student &amp; mentor metadata. Tempus and Munus read this roster over the JSON API.</p>
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-lg-3">
+    <div class="card text-bg-primary">
+      <div class="card-body">
+        <div class="fs-2 fw-bold">{{ stats.students }}</div>
+        <div class="small">Active Students</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card">
+      <div class="card-body">
+        <div class="fs-2 fw-bold">{{ stats.mentors }}</div>
+        <div class="small text-muted">Active Mentors</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card">
+      <div class="card-body">
+        <div class="fs-2 fw-bold">{{ stats.teams }}</div>
+        <div class="small text-muted">Teams</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card">
+      <div class="card-body">
+        <div class="fs-2 fw-bold">{{ stats.focus_groups }}</div>
+        <div class="small text-muted">Focus Groups</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="max-width: 640px;">
+  <div class="card-header"><i class="bi bi-plug me-1"></i> API Status</div>
+  <div class="card-body">
+    {% if api_enabled %}
+    <p class="mb-1"><span class="badge bg-success">Enabled</span> The read API is serving the roster to Tempus &amp; Munus.</p>
+    <a href="/admin/api" class="small">View API access details →</a>
+    {% else %}
+    <p class="mb-1"><span class="badge bg-warning text-dark">Disabled</span> No API key is configured, so the API returns 503.</p>
+    <p class="text-muted small mb-0">Set <code>LEGION_API_KEY</code> in <code>.env</code> to enable roster syncing.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
