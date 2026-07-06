@@ -105,3 +105,26 @@ Each app keeps its local `Student`/`Mentor` tables (preserving FKs to sessions/s
 submissions) and adds a `member_code`/`legion_id` link plus a sync job that pulls
 `/api/members?updated_since=…` and upserts. Not yet implemented — this repo only provides
 the source of truth and the API.
+
+## Architecture decision: data flows one way (down)
+
+Legion pushes **metadata** down to the apps; the apps own their **domain data**
+(Tempus = attendance/hours, Munus = volunteer hours/submissions) and never write it
+back. Do **not** add write-back — i.e. don't let Tempus/Munus push aggregates (hour
+totals, attendance counts, requirement progress) *up* into Legion. That was considered
+and rejected because it:
+- reverses the clean one-directional flow and makes Legion a write target for two
+  independent writers (needs write auth, conflict/staleness handling);
+- forces Legion to store **derived, duplicated** numbers that go stale the instant the
+  owning app changes, creating a "which number is right?" ambiguity;
+- grows Legion's schema per-metric and blurs ownership — reintroducing exactly the
+  duplication Legion exists to eliminate;
+- strips the app-side context (Tempus status multipliers, Munus approval state) that
+  gives those numbers meaning.
+
+**If a unified per-person profile is wanted later, aggregate at read-time, not
+write-time.** A profile view fans out and queries each app's *live* read endpoint by
+`member_code` when the page loads — nothing is stored in or written back to Legion, so
+every app stays authoritative and no number is ever stale. The only new work that needs
+is a small read endpoint on Tempus/Munus that returns a person's aggregate by
+`member_code`.
