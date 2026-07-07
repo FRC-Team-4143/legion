@@ -15,6 +15,12 @@
 <div class="card" style="max-width: 560px;">
   <div class="card-body">
     <p class="text-muted small">Canonical member code: <code>{{ member.member_code }}</code> <span class="text-muted">(fixed — never changes, even on rename)</span></p>
+    <p class="text-muted small">SSO username: <code>{{ member.username }}</code>
+      <form method="post" action="/admin/members/{{ member.id }}/regenerate-username" class="d-inline"
+            onsubmit="return confirm('Regenerate this member\'s SSO username? Any bookmarked sign-in with the old one will stop working.');">
+        <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">regenerate</button>
+      </form>
+    </p>
     <form method="post" action="/admin/members/{{ member.id }}/edit">
       <div class="mb-3">
         <label class="form-label">Name</label>
@@ -34,19 +40,38 @@
         </select>
       </div>
       <div class="mb-3">
-        <label class="form-label">Focus Group <small class="text-muted">(optional)</small></label>
-        <select name="focus_group_id" class="form-select">
+        <label class="form-label">Subteam <small class="text-muted">(optional)</small></label>
+        <select name="subteam_id" class="form-select">
           <option value="">—</option>
-          {% for g in focus_groups %}<option value="{{ g.id }}" {% if member.focus_group_id == g.id %}selected{% endif %}>{{ g.label }}</option>{% endfor %}
+          {% for g in subteams %}<option value="{{ g.id }}" {% if member.subteam_id == g.id %}selected{% endif %}>{{ g.label }}</option>{% endfor %}
         </select>
       </div>
       <div class="mb-3">
         <label class="form-label">Slack User ID <small class="text-muted">(optional)</small></label>
         <input name="slack_user_id" class="form-control" value="{{ member.slack_user_id or '' }}" placeholder="U01ABC...">
       </div>
+      <div class="mb-3">
+        <label class="form-label">Grade <small class="text-muted">(students only)</small></label>
+        <select name="grade" class="form-select">
+          <option value="">—</option>
+          {% for g in grades %}<option value="{{ g.value }}" {% if member.grade == g %}selected{% endif %}>{{ g | gradelabel }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Parent / Guardian 1 <small class="text-muted">(students only)</small></label>
+        <input name="parent_guardian_1" class="form-control" maxlength="200" value="{{ member.parent_guardian_1 or '' }}">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Parent / Guardian 2 <small class="text-muted">(students only)</small></label>
+        <input name="parent_guardian_2" class="form-control" maxlength="200" value="{{ member.parent_guardian_2 or '' }}">
+      </div>
       <div class="mb-3 form-check">
         <input type="checkbox" class="form-check-input" name="is_lead" id="edit_is_lead" value="1" {% if member.is_lead %}checked{% endif %}>
         <label class="form-check-label" for="edit_is_lead">Lead mentor <small class="text-muted">(mentors only)</small></label>
+      </div>
+      <div class="mb-3 form-check">
+        <input type="checkbox" class="form-check-input" name="is_admin" id="edit_is_admin" value="1" {% if member.is_admin %}checked{% endif %}>
+        <label class="form-check-label" for="edit_is_admin">Legion admin <small class="text-muted">(grants access to this admin site via SSO)</small></label>
       </div>
       <button type="submit" class="btn btn-primary">Save</button>
     </form>

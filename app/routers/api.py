@@ -14,9 +14,9 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database import get_db
-from app.models import FocusGroup, Member, MemberRole, Team
+from app.models import Member, MemberRole, Subteam, Team
 from app.services.members import (
-    serialize_focus_group, serialize_member, serialize_team,
+    serialize_member, serialize_subteam, serialize_team,
 )
 from app.utils import parse_iso_utc
 
@@ -49,7 +49,7 @@ async def list_members(
     their local copies; pass `active=true` to get only the current roster."""
     q = (
         select(Member)
-        .options(selectinload(Member.team), selectinload(Member.focus_group))
+        .options(selectinload(Member.team), selectinload(Member.subteam))
         .order_by(Member.name)
     )
 
@@ -77,7 +77,7 @@ async def get_member(member_code: str, db: AsyncSession = Depends(get_db)):
     member = (
         await db.execute(
             select(Member)
-            .options(selectinload(Member.team), selectinload(Member.focus_group))
+            .options(selectinload(Member.team), selectinload(Member.subteam))
             .where(Member.member_code == member_code)
         )
     ).scalars().first()
@@ -92,9 +92,9 @@ async def list_teams(db: AsyncSession = Depends(get_db)):
     return {"teams": [serialize_team(t) for t in teams]}
 
 
-@router.get("/focus-groups", dependencies=[Depends(require_api_key)])
-async def list_focus_groups(db: AsyncSession = Depends(get_db)):
+@router.get("/subteams", dependencies=[Depends(require_api_key)])
+async def list_subteams(db: AsyncSession = Depends(get_db)):
     groups = (
-        await db.execute(select(FocusGroup).order_by(FocusGroup.sort_order, FocusGroup.label))
+        await db.execute(select(Subteam).order_by(Subteam.sort_order, Subteam.label))
     ).scalars().all()
-    return {"focus_groups": [serialize_focus_group(g) for g in groups]}
+    return {"subteams": [serialize_subteam(g) for g in groups]}

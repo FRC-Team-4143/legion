@@ -1,0 +1,81 @@
+{% extends "admin/base.html" %}
+{% set active_page = "subteams" %}
+{% block title %}Subteams — Legion Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0">Subteams</h2>
+  <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addGroup"><i class="bi bi-plus-lg"></i> Add Subteam</button>
+</div>
+
+{% if error %}
+<div class="alert alert-danger alert-dismissible fade show py-2"><i class="bi bi-exclamation-triangle me-1"></i> {{ error }}<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
+{% endif %}
+
+<p class="text-muted small">Subteams / focus areas members can belong to. Retiring a subteam hides it from new assignments but keeps it on existing members and in the API.</p>
+
+<div class="card">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0 align-middle">
+      <thead class="table-light"><tr><th>Label</th><th>Slug</th><th>Members</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for row in groups %}
+        <tr {% if not row.group.is_active %}class="table-secondary"{% endif %}>
+          <td>{{ row.group.label }}</td>
+          <td><code class="text-muted">{{ row.group.slug }}</code></td>
+          <td><span class="badge bg-secondary">{{ row.count }}</span></td>
+          <td>{% if row.group.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Retired</span>{% endif %}</td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editGroup{{ row.group.id }}">Rename</button>
+            <form method="post" action="/admin/subteams/{{ row.group.id }}/toggle" class="d-inline">
+              <button class="btn btn-sm {% if row.group.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}">{% if row.group.is_active %}Retire{% else %}Reactivate{% endif %}</button>
+            </form>
+          </td>
+        </tr>
+        <div class="modal fade" id="editGroup{{ row.group.id }}" tabindex="-1">
+          <div class="modal-dialog"><div class="modal-content">
+            <form method="post" action="/admin/subteams/{{ row.group.id }}/edit">
+              <div class="modal-header"><h5 class="modal-title">Rename "{{ row.group.label }}"</h5></div>
+              <div class="modal-body">
+                <label class="form-label">Label</label>
+                <input name="label" class="form-control" value="{{ row.group.label }}" required>
+                <div class="form-text">The slug <code>{{ row.group.slug }}</code> stays fixed so API consumers don't break.</div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save</button>
+              </div>
+            </form>
+          </div></div>
+        </div>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted py-4">No subteams yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal fade" id="addGroup" tabindex="-1">
+  <div class="modal-dialog"><div class="modal-content">
+    <form method="post" action="/admin/subteams">
+      <div class="modal-header"><h5 class="modal-title">Add Subteam</h5></div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Label</label>
+          <input name="label" class="form-control" placeholder="Marketing" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Slug <small class="text-muted">(optional)</small></label>
+          <input name="slug" class="form-control" placeholder="auto-generated from label">
+          <div class="form-text">Stable machine key used by the API. Leave blank to derive it from the label.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Add</button>
+      </div>
+    </form>
+  </div></div>
+</div>
+{% endblock %}

@@ -13,8 +13,10 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.models import (
-    DEFAULT_FOCUS_GROUPS, DEFAULT_TEAMS, FocusGroup, Member, MemberRole, Team,
+    DEFAULT_SUBTEAMS, DEFAULT_TEAMS, Member, MemberRole,
+    StudentGrade, Subteam, Team,
 )
+from app.services.username import assign_unique_username
 
 
 @pytest_asyncio.fixture
@@ -32,8 +34,8 @@ async def engine():
     async with sm() as s:
         for number, name in DEFAULT_TEAMS:
             s.add(Team(number=number, name=name))
-        for i, (slug, label) in enumerate(DEFAULT_FOCUS_GROUPS):
-            s.add(FocusGroup(slug=slug, label=label, sort_order=i))
+        for i, (slug, label) in enumerate(DEFAULT_SUBTEAMS):
+            s.add(Subteam(slug=slug, label=label, sort_order=i))
         await s.commit()
     yield eng
     await eng.dispose()
@@ -59,29 +61,39 @@ async def make_member(db):
         name: str = "Ada Lovelace",
         role: MemberRole = MemberRole.student,
         team_number: int | None = 4143,
-        focus_slug: str | None = "software",
+        subteam_slug: str | None = "software",
         slack: str | None = None,
         is_active: bool = True,
         is_lead: bool = False,
         code: str | None = None,
+        username: str | None = None,
+        is_admin: bool = False,
+        grade: StudentGrade | None = None,
+        parent_guardian_1: str | None = None,
+        parent_guardian_2: str | None = None,
     ) -> Member:
         team_id = None
         if team_number is not None:
             t = (await db.execute(select(Team).where(Team.number == team_number))).scalars().first()
             team_id = t.id if t else None
-        focus_id = None
-        if focus_slug is not None:
-            g = (await db.execute(select(FocusGroup).where(FocusGroup.slug == focus_slug))).scalars().first()
-            focus_id = g.id if g else None
+        subteam_id = None
+        if subteam_slug is not None:
+            g = (await db.execute(select(Subteam).where(Subteam.slug == subteam_slug))).scalars().first()
+            subteam_id = g.id if g else None
         m = Member(
             name=name,
             member_code=code or secrets.token_hex(4),
+            username=username or await assign_unique_username(db, name),
             role=role,
             team_id=team_id,
-            focus_group_id=focus_id,
+            subteam_id=subteam_id,
             slack_user_id=slack,
             is_active=is_active,
             is_lead=is_lead,
+            is_admin=is_admin,
+            grade=grade,
+            parent_guardian_1=parent_guardian_1,
+            parent_guardian_2=parent_guardian_2,
         )
         db.add(m)
         await db.commit()

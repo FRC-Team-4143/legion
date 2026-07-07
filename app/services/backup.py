@@ -17,7 +17,7 @@ from app.config import settings
 log = logging.getLogger(__name__)
 
 # Tables we expect a valid backup to contain (sanity check before restoring).
-REQUIRED_TABLES = {"members", "teams", "focus_groups"}
+REQUIRED_TABLES = {"members", "teams", "subteams"}
 
 
 def sqlite_path() -> Optional[str]:

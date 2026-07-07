@@ -49,22 +49,25 @@
     <div class="card">
       <div class="card-header"><i class="bi bi-table me-1"></i> Column Reference</div>
       <div class="card-body">
-        <p class="text-muted small mb-2">Existing members are matched by name (case-insensitive) and updated. New members get an auto-generated canonical member code. Team is matched by number, focus group by slug.</p>
+        <p class="text-muted small mb-2">Existing members are matched by name (case-insensitive) and updated. New members get an auto-generated canonical member code. Team is matched by number, subteam by slug.</p>
         <table class="table table-sm mb-3">
           <thead class="table-light"><tr><th>Column</th><th>Required</th><th>Valid values</th></tr></thead>
           <tbody>
             <tr><td><code>role</code></td><td>✅</td><td><code>student</code> or <code>mentor</code></td></tr>
             <tr><td><code>name</code></td><td>✅</td><td>Full name</td></tr>
             <tr><td><code>team_number</code></td><td>optional</td><td>An existing team number, e.g. <code>4143</code></td></tr>
-            <tr><td><code>focus_group</code></td><td>optional</td><td>A focus-group slug, e.g. <code>software</code></td></tr>
+            <tr><td><code>subteam</code></td><td>optional</td><td>A subteam slug, e.g. <code>software</code></td></tr>
             <tr><td><code>slack_user_id</code></td><td>optional</td><td>Slack <code>U...</code> member ID (unique)</td></tr>
             <tr><td><code>is_lead</code></td><td>optional</td><td><code>true</code>/<code>false</code> (mentors only)</td></tr>
+            <tr><td><code>grade</code></td><td>optional</td><td><code>Junior High</code>, <code>Freshman</code>, <code>Sophomore</code>, <code>Junior</code>, <code>Senior</code>, <code>Alumni</code> (students only)</td></tr>
+            <tr><td><code>parent_guardian_1</code></td><td>optional</td><td>Guardian name (students only)</td></tr>
+            <tr><td><code>parent_guardian_2</code></td><td>optional</td><td>Guardian name (students only)</td></tr>
           </tbody>
         </table>
         <p class="text-muted small mb-1"><strong>Example:</strong></p>
-        <pre class="bg-dark text-light p-2 rounded small mb-0">role,name,team_number,focus_group,slack_user_id,is_lead
-student,Alice Smith,4143,software,U01ABC123,
-mentor,Jane Doe,4143,design,U02XYZ456,true</pre>
+        <pre class="bg-dark text-light p-2 rounded small mb-0">role,name,team_number,subteam,slack_user_id,is_lead,grade,parent_guardian_1,parent_guardian_2
+student,Alice Smith,4143,software,U01ABC123,,Sophomore,Bob Smith,Carol Smith
+mentor,Jane Doe,4143,design,U02XYZ456,true,,,</pre>
       </div>
     </div>
   </div>

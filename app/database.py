@@ -24,7 +24,7 @@ async def get_db() -> AsyncSession:
 
 
 async def init_db() -> None:
-    """Create all tables and seed initial data (teams + focus groups)."""
+    """Create all tables and seed initial data (teams + subteams)."""
     from app import models  # noqa: F401 — imported for side-effect (table registration)
 
     # Apply a staged database restore (if any) before the engine touches the file.
@@ -32,12 +32,46 @@ async def init_db() -> None:
     apply_pending_restore()
 
     async with engine.begin() as conn:
+        # Renames run BEFORE create_all so SQLAlchemy sees the already-renamed tables
+        # and skips recreating them.
+        await conn.run_sync(_migration_rename_focus_groups_to_subteams)
         await conn.run_sync(Base.metadata.create_all)
-        # (No migrations yet — this is the initial schema. Follow the sibling pattern:
-        #  add a `def _migration(conn)` guarded by `inspect(conn)` and call it here.)
+        # Additive column migrations run after create_all (safe on both fresh + existing).
+        await conn.run_sync(_migration_add_member_metadata)
 
     await _seed_teams()
-    await _seed_focus_groups()
+    await _seed_subteams()
+
+
+def _migration_rename_focus_groups_to_subteams(conn) -> None:
+    """Rename the focus_groups table to subteams and the focus_group_id column to
+    subteam_id on members. No-op on a fresh schema (no `members` table yet — create_all()
+    will make the current one right after) or an already-migrated database."""
+    from sqlalchemy import inspect, text
+
+    tables = inspect(conn).get_table_names()
+    if "focus_groups" in tables:
+        conn.execute(text("ALTER TABLE focus_groups RENAME TO subteams"))
+
+    if "members" not in tables:
+        return
+    cols = {c["name"] for c in inspect(conn).get_columns("members")}
+    if "focus_group_id" in cols:
+        conn.execute(text("ALTER TABLE members RENAME COLUMN focus_group_id TO subteam_id"))
+
+
+def _migration_add_member_metadata(conn) -> None:
+    """Add the student metadata columns (grade + parent/guardian 1 & 2) to an existing
+    `members` table. No-op on a freshly created schema, which already has them."""
+    from sqlalchemy import inspect, text
+
+    cols = {c["name"] for c in inspect(conn).get_columns("members")}
+    if "grade" not in cols:
+        conn.execute(text("ALTER TABLE members ADD COLUMN grade VARCHAR(20)"))
+    if "parent_guardian_1" not in cols:
+        conn.execute(text("ALTER TABLE members ADD COLUMN parent_guardian_1 VARCHAR(200)"))
+    if "parent_guardian_2" not in cols:
+        conn.execute(text("ALTER TABLE members ADD COLUMN parent_guardian_2 VARCHAR(200)"))
 
 
 async def _seed_teams() -> None:
@@ -55,16 +89,16 @@ async def _seed_teams() -> None:
         await session.commit()
 
 
-async def _seed_focus_groups() -> None:
-    """Insert the default focus groups if the table is empty (admins can add more)."""
+async def _seed_subteams() -> None:
+    """Insert the default subteams if the table is empty (admins can add more)."""
     from sqlalchemy import select
-    from app.models import DEFAULT_FOCUS_GROUPS, FocusGroup
+    from app.models import DEFAULT_SUBTEAMS, Subteam
 
     async with AsyncSessionLocal() as session:
         existing = set(
-            (await session.execute(select(FocusGroup.slug))).scalars().all()
+            (await session.execute(select(Subteam.slug))).scalars().all()
         )
-        for i, (slug, label) in enumerate(DEFAULT_FOCUS_GROUPS):
+        for i, (slug, label) in enumerate(DEFAULT_SUBTEAMS):
             if slug not in existing:
-                session.add(FocusGroup(slug=slug, label=label, sort_order=i))
+                session.add(Subteam(slug=slug, label=label, sort_order=i))
         await session.commit()

@@ -22,6 +22,21 @@ async def job_nightly_backup() -> None:
         log.exception("Backup failed")
 
 
+async def job_sync_slack_profiles() -> None:
+    """Push member metadata into Slack custom profile fields. No-op when Slack isn't
+    configured or automated updates are disabled."""
+    if not settings.slack_bot_token or not settings.updates_enabled:
+        return
+    try:
+        from app.database import AsyncSessionLocal
+        from app.services.slack_profile import sync_all_profiles
+        async with AsyncSessionLocal() as db:
+            result = await sync_all_profiles(db, automated=True)
+        log.info("Slack profile sync: %s", result)
+    except Exception:  # never let a Slack failure crash the scheduler
+        log.exception("Slack profile sync failed")
+
+
 def register_jobs(scheduler: AsyncIOScheduler) -> None:
     """(Re)register scheduled jobs from current settings. Safe to call on a running
     scheduler (``replace_existing=True``)."""
@@ -35,6 +50,19 @@ def register_jobs(scheduler: AsyncIOScheduler) -> None:
             timezone=settings.timezone,
         ),
         id="nightly_backup",
+        replace_existing=True,
+    )
+
+    sh, sm = settings.slack_sync_time.split(":")
+    scheduler.add_job(
+        job_sync_slack_profiles,
+        CronTrigger(
+            day_of_week=settings.slack_sync_day,
+            hour=int(sh),
+            minute=int(sm),
+            timezone=settings.timezone,
+        ),
+        id="slack_profile_sync",
         replace_existing=True,
     )
 

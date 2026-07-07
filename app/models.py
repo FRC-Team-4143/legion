@@ -28,9 +28,46 @@ def role_label(role: Optional[MemberRole]) -> str:
     return ROLE_LABELS.get(role, "—") if role else "—"
 
 
-# Focus groups seeded on first startup — mirrors Tempus's fixed software/design/business
+class StudentGrade(str, enum.Enum):
+    """A student's school year. Fixed, ordered, and not admin-editable (unlike subteams
+    / teams), so it lives in an enum like MemberRole rather than a data table.
+    Mentors never have a grade. The order below also drives the yearly grade bump."""
+    junior_high = "junior_high"
+    freshman = "freshman"
+    sophomore = "sophomore"
+    junior = "junior"
+    senior = "senior"
+    alumni = "alumni"
+
+
+GRADE_LABELS: dict[StudentGrade, str] = {
+    StudentGrade.junior_high: "Junior High",
+    StudentGrade.freshman: "Freshman",
+    StudentGrade.sophomore: "Sophomore",
+    StudentGrade.junior: "Junior",
+    StudentGrade.senior: "Senior",
+    StudentGrade.alumni: "Alumni",
+}
+
+# The grade progression, low → high. The yearly bump advances each student to the next
+# entry; a senior graduates to alumni (and is archived).
+GRADE_ORDER: list[StudentGrade] = [
+    StudentGrade.junior_high,
+    StudentGrade.freshman,
+    StudentGrade.sophomore,
+    StudentGrade.junior,
+    StudentGrade.senior,
+    StudentGrade.alumni,
+]
+
+
+def grade_label(grade: Optional[StudentGrade]) -> str:
+    return GRADE_LABELS.get(grade, "—") if grade else "—"
+
+
+# Subteams seeded on first startup — mirrors Tempus's fixed software/design/business
 # set, but here they live in a table so admins can add/rename/retire them.
-DEFAULT_FOCUS_GROUPS: list[tuple[str, str]] = [
+DEFAULT_SUBTEAMS: list[tuple[str, str]] = [
     ("software", "Software"),
     ("design", "Design"),
     ("business", "Business"),
@@ -62,9 +99,9 @@ class Team(Base):
     members: Mapped[list["Member"]] = relationship("Member", back_populates="team")
 
 
-class FocusGroup(Base):
+class Subteam(Base):
     """A subteam / focus area (software, design, business, …). Admin-editable."""
-    __tablename__ = "focus_groups"
+    __tablename__ = "subteams"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     slug: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
@@ -74,7 +111,7 @@ class FocusGroup(Base):
         Boolean, nullable=False, default=True, server_default="1"
     )
 
-    members: Mapped[list["Member"]] = relationship("Member", back_populates="focus_group")
+    members: Mapped[list["Member"]] = relationship("Member", back_populates="subteam")
 
 
 class Member(Base):
@@ -97,8 +134,8 @@ class Member(Base):
     team_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("teams.id"), nullable=True
     )
-    focus_group_id: Mapped[Optional[int]] = mapped_column(
-        Integer, ForeignKey("focus_groups.id"), nullable=True
+    subteam_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("subteams.id"), nullable=True
     )
 
     # Shared Slack link. Unique when present (SQLite allows multiple NULLs), so a Slack
@@ -114,6 +151,25 @@ class Member(Base):
     is_lead: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
     )
+
+    # SSO login name (`last.first`, truncated to 4 chars each — see services/username.py).
+    # Minted once at creation and stable afterward (an admin can force a new one via the
+    # "regenerate" action, but nothing does so automatically on rename).
+    username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    # Grants access to Legion's own /admin and, via the shared SSO cookie, an
+    # "is_admin" claim sibling apps can check. Orthogonal to `is_lead` — a mentor lead
+    # is not automatically a Legion admin.
+    is_admin: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+
+    # Student-only metadata (null for mentors, gated by app logic like is_lead above).
+    grade: Mapped[Optional[StudentGrade]] = mapped_column(
+        SAEnum(StudentGrade), nullable=True
+    )
+    parent_guardian_1: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    parent_guardian_2: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
@@ -125,9 +181,73 @@ class Member(Base):
     )
 
     team: Mapped[Optional["Team"]] = relationship("Team", back_populates="members")
-    focus_group: Mapped[Optional["FocusGroup"]] = relationship(
-        "FocusGroup", back_populates="members"
+    subteam: Mapped[Optional["Subteam"]] = relationship("Subteam", back_populates="members")
+
+
+class AuthStatus(str, enum.Enum):
+    """State machine for one SSO login challenge, driven by `/slack/interact` (approve/
+    deny) and the polling `/sso/status` endpoint (expired/consumed)."""
+    pending = "pending"
+    approved = "approved"
+    denied = "denied"
+    expired = "expired"
+    consumed = "consumed"
+
+
+class AuthRequest(Base):
+    """One SSO login attempt: the Slack Approve/Deny challenge for a `username` submitted
+    at `/sso/authorize`. Single-use — `/sso/complete` consumes it exactly once.
+
+    `member_id` is null when the submitted username didn't match any active member. We
+    still create a row and show the same "check Slack" page either way (see
+    `routers/sso.py`) so the login form can't be used to enumerate valid usernames — a
+    row with no member simply sits pending until it expires, since nothing can approve it.
+    """
+    __tablename__ = "auth_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    nonce: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    member_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("members.id"), nullable=True
     )
+    app: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    return_to: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    state: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    device_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    ip: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    status: Mapped[AuthStatus] = mapped_column(
+        SAEnum(AuthStatus), nullable=False, default=AuthStatus.pending
+    )
+    # Captured from chat.postMessage so `/slack/interact` can edit the DM in place
+    # (removes the Approve/Deny buttons once the challenge is decided).
+    slack_channel_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    slack_message_ts: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+    member: Mapped[Optional["Member"]] = relationship("Member")
+
+
+class AuthThrottle(Base):
+    """Rate-limit / exponential-backoff bucket for the SSO login prompt. `key` is either
+    `device:<device_id>` (an anonymous per-browser cap, checked first) or
+    `member:<member_id>` (stops a botnet of devices from all hammering one person's
+    Slack). One table covers both so the two caps share identical window/backoff logic
+    (`services/throttle.py`)."""
+    __tablename__ = "auth_throttles"
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    window_start: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
+    # Number of times this key has tripped the limit — grows the backoff exponentially
+    # so repeat spamming is punished harder than a one-off burst.
+    lock_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class AuditLog(Base):

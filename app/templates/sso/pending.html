@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Check Slack — Legion SSO</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    body { background: #0a0a0a; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .card-box { background: #111111; border: 1px solid #2a1a1a; border-radius: 10px; padding: 2rem; width: 380px; text-align: center; }
+    .card-box h1 { color: #cc2200; font-size: 1.3rem; font-weight: 700; }
+    .text-muted { color: #9a7878 !important; }
+    .spinner-border { color: #cc2200; }
+  </style>
+</head>
+<body>
+  <div class="card-box">
+    <h1 class="mb-3"><i class="bi bi-slack"></i> Check Slack</h1>
+    <div class="spinner-border mb-3" id="spinner" role="status"></div>
+    <p id="message" class="text-muted">We sent an Approve/Deny prompt to your Slack. Tap Approve there to finish signing in.</p>
+    <a id="retry" href="javascript:location.reload()" class="btn btn-outline-secondary btn-sm d-none">Try again</a>
+  </div>
+  <script>
+    const nonce = {{ nonce | tojson }};
+    const deadline = Date.now() + {{ challenge_ttl }} * 1000;
+
+    function finish(status) {
+      document.getElementById("spinner").classList.add("d-none");
+      document.getElementById("message").textContent =
+        status === "denied" ? "🚫 Sign-in was denied." : "⌛ This sign-in request expired.";
+      document.getElementById("retry").classList.remove("d-none");
+    }
+
+    async function poll() {
+      if (Date.now() > deadline) return finish("expired");
+      try {
+        const res = await fetch(`/sso/status/${nonce}`);
+        const data = await res.json();
+        if (data.status === "approved") {
+          window.location.href = `/sso/complete/${nonce}`;
+          return;
+        }
+        if (data.status === "denied" || data.status === "expired") {
+          return finish(data.status);
+        }
+      } catch (e) { /* transient network error — keep polling */ }
+      setTimeout(poll, 1500);
+    }
+
+    poll();
+  </script>
+</body>
+</html>

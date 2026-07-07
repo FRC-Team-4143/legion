@@ -18,7 +18,8 @@ uvicorn app.main:app --reload --port 8002
 ```
 
 Requires a `.env` file (see `.env.example`). Key vars: `ADMIN_PASSWORD`, `SESSION_SECRET`,
-`LEGION_API_KEY` (the shared secret Tempus/Munus present as `X-API-Key`; blank = API off).
+`LEGION_API_KEY` (the shared secret Tempus/Munus present as `X-API-Key`; blank = API off),
+`SSO_SECRET`, `SLACK_AUTH_BOT_TOKEN` + `SLACK_SIGNING_SECRET` (SSO login — see below).
 
 ## Testing
 
@@ -39,14 +40,21 @@ app/
   models.py          # ORM models + MemberRole labels/defaults
   utils.py           # Timezone helpers + ISO datetime parse/format
   routers/
-    admin.py         # Password-protected management UI (members/teams/focus/import/backup)
+    admin.py         # SSO(+break-glass password)-protected management UI
     api.py           # Read-only JSON API (X-API-Key protected) — the sync contract
+    sso.py           # SSO endpoints: authorize / status / complete / logout
+    slack.py         # Inbound Slack interactivity — SSO Approve/Deny button clicks
   services/
     members.py       # member_code generation + JSON serializers (shared by API + admin)
+    username.py      # SSO username generation (last.first) + collision handling
+    sso.py           # mw_sso cookie mint/verify + device cookie + return_to allow-list
+    slack_auth.py    # Outbound SSO challenge DM (Approve/Deny) + message update
+    throttle.py      # SSO login rate limit / exponential backoff
     backup.py        # SQLite snapshot backup + staged restore (VACUUM INTO)
     scheduler.py     # APScheduler: nightly backup
     audit.py         # Append-only mutation log
   templates/admin/   # Jinja templates (extend admin/base.html; dark theme)
+  templates/sso/     # Standalone SSO pages (username entry, "check Slack" polling)
 ```
 
 ## Key Conventions
@@ -66,8 +74,13 @@ link and is **unique when set**.
 
 ### Members are unified
 Students and mentors are one `members` table discriminated by `role` (`MemberRole`).
-Team and focus group are nullable FKs. `is_lead` is a mentor-only flag. Soft-delete via
-`is_active` + `archived_at`, matching the siblings.
+Team and focus group are nullable FKs. `is_lead` is a mentor-only flag. `grade`
+(`StudentGrade` enum) and `parent_guardian_1/2` are student-only — like `is_lead`, they
+live on every row but app logic gates them to the right role (clears them for mentors).
+Soft-delete via `is_active` + `archived_at`, matching the siblings. The **Yearly Grade
+Increase** admin action (`/admin/members/bump-grades`) walks `GRADE_ORDER`; a senior
+graduates to `alumni` and is archived. `grade` is exposed on the read API; guardian
+names are deliberately **not** (PII, and no consumer needs them).
 
 ### Focus groups & teams are data, not enums
 `focus_groups` and `teams` are admin-editable tables (unlike Tempus's hardcoded
@@ -83,12 +96,41 @@ Read-only, `X-API-Key`-gated (fails closed with 503 if no key configured). Endpo
 live in `services/members.py` so admin and API agree on the wire shape.
 
 ### Auth
-Admin only — password login setting the `admin_session` itsdangerous cookie (12h), same
-pattern as Tempus/Munus. There is no per-member login; Legion is a back-office tool.
+Legion is the SSO provider for the MARS/WARS apps (see the dedicated section below).
+`/admin` is gated on a valid `mw_sso` cookie with `is_admin: true`; the original
+password login (`admin_session` itsdangerous cookie, 12h) still works as a break-glass
+fallback — see `routers/admin.py`'s `_require_auth`. There is still no *sibling-app*
+consumption of the SSO cookie yet (Tempus/Munus) — this repo only provides the
+provider side and the documented contract (README "Single sign-on" section).
+
+### Single sign-on (`routers/sso.py`, `routers/slack.py`, `services/sso.py`)
+Passwordless: a member enters their auto-generated `username` (`services/username.py`,
+`last.first` truncated to 4 chars each, collisions suffixed); Legion DMs their Slack an
+Approve/Deny push (`services/slack_auth.py`, needs `SLACK_AUTH_BOT_TOKEN` — a real bot
+token, distinct from the profile-sync's admin *user* token `SLACK_BOT_TOKEN`) and, once
+approved via `POST /slack/interact`, sets the `mw_sso` cookie (`services/sso.py`,
+`itsdangerous`-signed, `Domain=SSO_COOKIE_DOMAIN`). Every sibling app is meant to verify
+that cookie locally with the shared `SSO_SECRET` — no callback to Legion. Login attempts
+are rate-limited + exponentially backed off per browser and per member
+(`services/throttle.py`); an unmatched username gets the identical "check Slack"
+response as a real one (no enumeration). See `AuthRequest` / `AuthThrottle` in
+`models.py` for the storage shape and `AuthStatus` for the challenge state machine.
 
 ### Database migrations
 No Alembic. Add a `def _migration(conn)` guarded by `inspect(conn)` in `database.py` and
-call it from `init_db()`, mirroring the siblings.
+call it from `init_db()`, mirroring the siblings. First example:
+`_migration_add_member_metadata` (adds `grade` + `parent_guardian_1/2`). New columns
+that don't need to survive existing data (e.g. `username`/`is_admin` on `Member`) can
+just be declared on the model and picked up by `create_all()` — no migration needed
+until there's a real deployed database to preserve.
+
+### Slack profile sync (`services/slack_profile.py`)
+One-way push of member metadata into Slack **custom profile fields** (Team, School Year,
+Focus Group, Parent/Guardian 1 & 2 — guardians for students only). Mirrors the siblings'
+cached `AsyncWebClient` + swallow-and-log pattern. Driven by a nightly APScheduler job
+(`job_sync_slack_profiles`) and a manual `/admin/members/sync-slack` button. Gated on
+`slack_bot_token` + `updates_enabled`. Field IDs are constants in the service. Requires
+an **admin user token** (`xoxp-…`) — a bot token can only edit its own profile.
 
 ## UI Conventions
 Single dark theme shared with Tempus/Munus (`#0a0a0a` bg, `#111111` panels, accent red
@@ -104,7 +146,10 @@ and `deploy.sh`.
 Each app keeps its local `Student`/`Mentor` tables (preserving FKs to sessions/signups/
 submissions) and adds a `member_code`/`legion_id` link plus a sync job that pulls
 `/api/members?updated_since=…` and upserts. Not yet implemented — this repo only provides
-the source of truth and the API.
+the source of truth and the API. Separately, once an app wants to consume **SSO**, it
+verifies the `mw_sso` cookie locally with the shared `SSO_SECRET` and redirects to
+Legion's `/sso/authorize` on a miss — no code from this repo is imported, just the
+cookie contract documented in README.md's "Single sign-on" section.
 
 ## Architecture decision: data flows one way (down)
 

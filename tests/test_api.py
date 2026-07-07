@@ -71,11 +71,11 @@ async def test_get_member_by_code(client, api_key, make_member):
     assert missing.status_code == 404
 
 
-async def test_teams_and_focus_groups(client, api_key):
+async def test_teams_and_subteams(client, api_key):
     teams = await client.get("/api/teams", headers={"X-API-Key": api_key})
     numbers = {t["number"] for t in teams.json()["teams"]}
     assert {4143, 4423} <= numbers
 
-    groups = await client.get("/api/focus-groups", headers={"X-API-Key": api_key})
-    slugs = {g["slug"] for g in groups.json()["focus_groups"]}
+    groups = await client.get("/api/subteams", headers={"X-API-Key": api_key})
+    slugs = {g["slug"] for g in groups.json()["subteams"]}
     assert {"software", "design", "business"} <= slugs

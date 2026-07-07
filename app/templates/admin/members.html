@@ -11,10 +11,21 @@
     {% else %}
     <a href="/admin/members?show_archived=1{% if role_filter %}&role={{ role_filter }}{% endif %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-archive me-1"></i> Show Archived</a>
     {% endif %}
+    <form method="post" action="/admin/members/bump-grades" class="d-inline"
+          onsubmit="return confirm('Advance every active student one grade? Seniors graduate to Alumni and are archived.')">
+      <button class="btn btn-outline-warning btn-sm"><i class="bi bi-arrow-up-circle me-1"></i> Yearly Grade Increase</button>
+    </form>
+    <form method="post" action="/admin/members/sync-slack" class="d-inline"
+          onsubmit="return confirm('Push team, school year, subteam and guardian data into Slack profiles for all active members?')">
+      <button class="btn btn-outline-info btn-sm"><i class="bi bi-slack me-1"></i> Sync Slack Profiles</button>
+    </form>
     <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addModal"><i class="bi bi-plus-lg"></i> Add Member</button>
   </div>
 </div>
 
+{% if message %}
+<div class="alert alert-success alert-dismissible fade show py-2"><i class="bi bi-check-circle me-1"></i> {{ message }}<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
+{% endif %}
 {% if error %}
 <div class="alert alert-danger alert-dismissible fade show py-2"><i class="bi bi-exclamation-triangle me-1"></i> {{ error }}<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
 {% endif %}
@@ -29,16 +40,18 @@
   <div class="card-body p-0">
     <table class="table table-hover mb-0 align-middle">
       <thead class="table-light">
-        <tr><th>Name</th><th>Role</th><th>Team</th><th>Focus</th><th>Slack UID</th><th>Member Code</th><th></th></tr>
+        <tr><th>Name</th><th>Role</th><th>Team</th><th>Subteam</th><th>Grade</th><th>Slack UID</th><th>Username</th><th>Member Code</th><th></th></tr>
       </thead>
       <tbody>
         {% for m in members %}
         <tr {% if not m.is_active %}class="table-secondary"{% endif %}>
-          <td>{{ m.name }}{% if m.is_lead %}<span class="badge bg-primary ms-1">Lead</span>{% endif %}{% if not m.is_active %}<span class="badge bg-secondary ms-1">Archived</span>{% endif %}</td>
+          <td>{{ m.name }}{% if m.is_lead %}<span class="badge bg-primary ms-1">Lead</span>{% endif %}{% if m.is_admin %}<span class="badge bg-danger ms-1">Admin</span>{% endif %}{% if not m.is_active %}<span class="badge bg-secondary ms-1">Archived</span>{% endif %}</td>
           <td>{{ m.role | rolelabel }}</td>
           <td>{{ m.team.number if m.team else '—' }}</td>
-          <td>{{ m.focus_group.label if m.focus_group else '—' }}</td>
+          <td>{{ m.subteam.label if m.subteam else '—' }}</td>
+          <td>{{ m.grade | gradelabel if m.grade else '—' }}</td>
           <td>{{ m.slack_user_id or '—' }}</td>
+          <td><code class="text-muted">{{ m.username }}</code></td>
           <td><code class="text-muted">{{ m.member_code }}</code></td>
           <td class="text-end">
             {% if m.is_active %}
@@ -59,7 +72,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="7" class="text-center text-muted py-4">No members yet. Add one or import a CSV.</td></tr>
+        <tr><td colspan="9" class="text-center text-muted py-4">No members yet. Add one or import a CSV.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -91,19 +104,38 @@
             </select>
           </div>
           <div class="mb-3">
-            <label class="form-label">Focus Group <small class="text-muted">(optional)</small></label>
-            <select name="focus_group_id" class="form-select">
+            <label class="form-label">Subteam <small class="text-muted">(optional)</small></label>
+            <select name="subteam_id" class="form-select">
               <option value="">—</option>
-              {% for g in focus_groups %}<option value="{{ g.id }}">{{ g.label }}</option>{% endfor %}
+              {% for g in subteams %}<option value="{{ g.id }}">{{ g.label }}</option>{% endfor %}
             </select>
           </div>
           <div class="mb-3">
             <label class="form-label">Slack User ID <small class="text-muted">(optional)</small></label>
             <input name="slack_user_id" class="form-control" placeholder="U01ABC...">
           </div>
+          <div class="mb-3">
+            <label class="form-label">Grade <small class="text-muted">(students only)</small></label>
+            <select name="grade" class="form-select">
+              <option value="">—</option>
+              {% for g in grades %}<option value="{{ g.value }}">{{ g | gradelabel }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Parent / Guardian 1 <small class="text-muted">(students only)</small></label>
+            <input name="parent_guardian_1" class="form-control" maxlength="200">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Parent / Guardian 2 <small class="text-muted">(students only)</small></label>
+            <input name="parent_guardian_2" class="form-control" maxlength="200">
+          </div>
           <div class="mb-1 form-check">
             <input type="checkbox" class="form-check-input" name="is_lead" id="add_is_lead" value="1">
             <label class="form-check-label" for="add_is_lead">Lead mentor <small class="text-muted">(mentors only)</small></label>
+          </div>
+          <div class="mb-1 form-check">
+            <input type="checkbox" class="form-check-input" name="is_admin" id="add_is_admin" value="1">
+            <label class="form-check-label" for="add_is_admin">Legion admin <small class="text-muted">(grants access to this admin site via SSO)</small></label>
           </div>
         </div>
         <div class="modal-footer">
