@@ -1,4 +1,4 @@
-"""CSV import: upsert by name, team/focus lookup, is_lead, error rows."""
+"""CSV import: upsert by name, team/focus lookup, error rows."""
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -27,9 +27,9 @@ async def _member(db, name):
 async def test_import_creates_members(client, db):
     await _login(client)
     csv_text = (
-        "role,name,team_number,subteam,slack_user_id,is_lead\n"
-        "student,Alice Smith,4143,software,U01ABC,\n"
-        "mentor,Jane Doe,4423,design,U02XYZ,true\n"
+        "role,name,team_number,subteam,slack_user_id\n"
+        "student,Alice Smith,4143,software,U01ABC\n"
+        "mentor,Jane Doe,4423,design,U02XYZ\n"
     )
     resp = await client.post("/admin/import", files=_csv_upload(csv_text))
     assert resp.status_code == 200
@@ -42,15 +42,14 @@ async def test_import_creates_members(client, db):
 
     jane = await _member(db, "Jane Doe")
     assert jane.role == MemberRole.mentor
-    assert jane.is_lead is True
 
 
 async def test_import_upserts_by_name(client, db, make_member):
     await make_member(name="Bob Jones", team_number=4143, subteam_slug="software", slack="U0OLD")
     await _login(client)
     csv_text = (
-        "role,name,team_number,subteam,slack_user_id,is_lead\n"
-        "student,bob jones,4423,design,,\n"  # case-insensitive match, moves teams
+        "role,name,team_number,subteam,slack_user_id\n"
+        "student,bob jones,4423,design,\n"  # case-insensitive match, moves teams
     )
     await client.post("/admin/import", files=_csv_upload(csv_text))
 
@@ -62,10 +61,10 @@ async def test_import_upserts_by_name(client, db, make_member):
 async def test_import_reports_unknown_team_and_focus(client, db):
     await _login(client)
     csv_text = (
-        "role,name,team_number,subteam,slack_user_id,is_lead\n"
-        "student,Bad Team,9999,software,,\n"
-        "student,Bad Focus,4143,nope,,\n"
-        "student,Good One,4143,software,,\n"
+        "role,name,team_number,subteam,slack_user_id\n"
+        "student,Bad Team,9999,software,\n"
+        "student,Bad Focus,4143,nope,\n"
+        "student,Good One,4143,software,\n"
     )
     resp = await client.post("/admin/import", files=_csv_upload(csv_text))
     assert resp.status_code == 200

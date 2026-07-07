@@ -27,7 +27,7 @@ async def test_build_profile_fields_student(db, make_member):
     )
     fields = build_profile_fields(await _loaded(db, "Student One"))
 
-    assert fields[FIELD_TEAM]["value"] == "MARS/WARS"
+    assert fields[FIELD_TEAM]["value"] == "4143 - MARS/WARS"
     assert fields[FIELD_SCHOOL_YEAR]["value"] == "Sophomore"  # label, not enum value
     assert fields[FIELD_SUBTEAM]["value"] == "Software"
     assert fields[FIELD_PARENT_1]["value"] == "Parent A"
@@ -39,7 +39,7 @@ async def test_build_profile_fields_omits_guardians_for_mentor(db, make_member):
     fields = build_profile_fields(await _loaded(db, "Mentor One"))
 
     # Team / focus are sent for everyone...
-    assert fields[FIELD_TEAM]["value"] == "MARS' Minions"
+    assert fields[FIELD_TEAM]["value"] == "4423 - MARS' Minions"
     assert fields[FIELD_SUBTEAM]["value"] == "Design"
     # ...but the guardian field IDs are omitted entirely for mentors.
     assert FIELD_PARENT_1 not in fields

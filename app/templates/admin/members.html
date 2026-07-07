@@ -45,7 +45,7 @@
       <tbody>
         {% for m in members %}
         <tr {% if not m.is_active %}class="table-secondary"{% endif %}>
-          <td>{{ m.name }}{% if m.is_lead %}<span class="badge bg-primary ms-1">Lead</span>{% endif %}{% if m.is_admin %}<span class="badge bg-danger ms-1">Admin</span>{% endif %}{% if not m.is_active %}<span class="badge bg-secondary ms-1">Archived</span>{% endif %}</td>
+          <td>{{ m.name }}{% if not m.is_active %}<span class="badge bg-secondary ms-1">Archived</span>{% endif %}</td>
           <td>{{ m.role | rolelabel }}</td>
           <td>{{ m.team.number if m.team else '—' }}</td>
           <td>{{ m.subteam.label if m.subteam else '—' }}</td>
@@ -128,14 +128,6 @@
           <div class="mb-3">
             <label class="form-label">Parent / Guardian 2 <small class="text-muted">(students only)</small></label>
             <input name="parent_guardian_2" class="form-control" maxlength="200">
-          </div>
-          <div class="mb-1 form-check">
-            <input type="checkbox" class="form-check-input" name="is_lead" id="add_is_lead" value="1">
-            <label class="form-check-label" for="add_is_lead">Lead mentor <small class="text-muted">(mentors only)</small></label>
-          </div>
-          <div class="mb-1 form-check">
-            <input type="checkbox" class="form-check-input" name="is_admin" id="add_is_admin" value="1">
-            <label class="form-check-label" for="add_is_admin">Legion admin <small class="text-muted">(grants access to this admin site via SSO)</small></label>
           </div>
         </div>
         <div class="modal-footer">

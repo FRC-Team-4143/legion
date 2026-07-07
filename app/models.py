@@ -4,7 +4,7 @@ from typing import Optional
 
 from sqlalchemy import (
     Integer, String, Boolean, DateTime, Text,
-    ForeignKey, Enum as SAEnum,
+    ForeignKey, Enum as SAEnum, Table, Column,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -66,7 +66,7 @@ def grade_label(grade: Optional[StudentGrade]) -> str:
 
 
 # Subteams seeded on first startup — mirrors Tempus's fixed software/design/business
-# set, but here they live in a table so admins can add/rename/retire them.
+# set, but here they live in a table so admins can add/rename/archive/purge them.
 DEFAULT_SUBTEAMS: list[tuple[str, str]] = [
     ("software", "Software"),
     ("design", "Design"),
@@ -77,6 +77,20 @@ DEFAULT_SUBTEAMS: list[tuple[str, str]] = [
 DEFAULT_TEAMS: list[tuple[int, str]] = [
     (4143, "MARS/WARS"),
     (4423, "MARS' Minions"),
+]
+
+# Authorization groups seeded on first startup. Admin-editable (add/rename/archive/purge)
+# like subteams, but exposed to the sibling apps in the SSO cookie + read API so each app can
+# gate admin sign-in and render role-specific menus. `legion-admin` is special-cased:
+# membership grants access to Legion's own /admin (the migration backfills it from the old
+# `is_admin` flag). The rest are just metadata Legion hands down — Tempus/Munus decide what
+# they mean.
+DEFAULT_GROUPS: list[tuple[str, str]] = [
+    ("legion-admin", "Legion Admin"),
+    ("legion-manager", "Legion Manager"),
+    ("tempus-admin", "Tempus Admin"),
+    ("munus-admin", "Munus Admin"),
+    ("munus-manager", "Munus Manager"),
 ]
 
 
@@ -114,6 +128,40 @@ class Subteam(Base):
     members: Mapped[list["Member"]] = relationship("Member", back_populates="subteam")
 
 
+# Many-to-many link between members and user groups. A member can hold several groups at
+# once (e.g. both "Munus Admin" and "Legion Admin"), unlike the single-FK subteam.
+member_user_groups = Table(
+    "member_user_groups",
+    Base.metadata,
+    Column("member_id", ForeignKey("members.id", ondelete="CASCADE"), primary_key=True),
+    Column("group_id", ForeignKey("user_groups.id", ondelete="CASCADE"), primary_key=True),
+)
+
+
+class Group(Base):
+    """An admin-editable authorization group (e.g. "Munus Admin", "Legion Admin").
+
+    Surfaced to sibling apps in the `mw_sso` cookie claims + the read API so each app can
+    gate admin sign-in and pick which menus to render. Mirrors the Subteam lookup-table
+    pattern (stable `slug` for API consumers, human `label`, `is_active` archive flag that
+    can then be permanently purged once archived). Table is named `user_groups` to
+    sidestep the SQL `GROUPS` keyword.
+    """
+    __tablename__ = "user_groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    slug: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="1"
+    )
+
+    members: Mapped[list["Member"]] = relationship(
+        "Member", secondary=member_user_groups, back_populates="groups"
+    )
+
+
 class Member(Base):
     """The source-of-truth record for one student or mentor.
 
@@ -147,23 +195,13 @@ class Member(Base):
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="1"
     )
-    # Mentor "lead" flag (Tempus uses this for escalation DMs); ignored for students.
-    is_lead: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default="0"
-    )
 
     # SSO login name (`last.first`, truncated to 4 chars each — see services/username.py).
     # Minted once at creation and stable afterward (an admin can force a new one via the
     # "regenerate" action, but nothing does so automatically on rename).
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
-    # Grants access to Legion's own /admin and, via the shared SSO cookie, an
-    # "is_admin" claim sibling apps can check. Orthogonal to `is_lead` — a mentor lead
-    # is not automatically a Legion admin.
-    is_admin: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default="0"
-    )
 
-    # Student-only metadata (null for mentors, gated by app logic like is_lead above).
+    # Student-only metadata (null for mentors, gated by role in app logic).
     grade: Mapped[Optional[StudentGrade]] = mapped_column(
         SAEnum(StudentGrade), nullable=True
     )
@@ -182,6 +220,10 @@ class Member(Base):
 
     team: Mapped[Optional["Team"]] = relationship("Team", back_populates="members")
     subteam: Mapped[Optional["Subteam"]] = relationship("Subteam", back_populates="members")
+    # Authorization groups (many-to-many). Exposed to sibling apps via the SSO token + API.
+    groups: Mapped[list["Group"]] = relationship(
+        "Group", secondary=member_user_groups, back_populates="members"
+    )
 
 
 class AuthStatus(str, enum.Enum):

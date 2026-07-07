@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     sso_cookie_domain: str = ""
     sso_session_ttl: int = 60 * 60 * 12  # how long the mw_sso cookie is trusted (seconds)
     sso_challenge_ttl: int = 30  # how long an Approve/Deny prompt stays valid (seconds)
+    # Separate, longer TTL for challenges started server-to-server via POST /sso/challenge
+    # (e.g. Munus's /vhours one-tap link): unlike the browser-form flow above, there's a
+    # human-reads-a-Slack-message delay before the browser ever starts polling, so the
+    # challenge needs to survive longer than the 30s tuned for an already-open, already-
+    # polling tab.
+    sso_api_challenge_ttl: int = 300  # 5 min
 
     # Login rate limit: `sso_rate_max` attempts per `sso_rate_window` seconds, per
     # browser (device cookie) and per matched member. Exceeding it locks the key for

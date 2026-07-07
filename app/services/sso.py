@@ -31,8 +31,10 @@ def make_sso_token(member: Member) -> str:
         "name": member.name,
         "role": member.role.value,
         "team_number": member.team.number if member.team else None,
-        "is_lead": member.is_lead,
-        "is_admin": member.is_admin,
+        # Authorization group slugs. Each sibling app reads these to gate admin sign-in
+        # and pick which menus to render; `legion-admin` governs Legion's own /admin.
+        # All assigned groups are emitted (retiring a group only blocks new assignment).
+        "groups": [g.slug for g in member.groups],
         "slack_user_id": member.slack_user_id,
     })
 

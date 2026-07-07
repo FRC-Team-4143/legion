@@ -8,7 +8,7 @@ import secrets
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Member, Subteam, Team
+from app.models import Group, Member, Subteam, Team
 from app.utils import isoformat_utc
 
 
@@ -29,7 +29,7 @@ async def generate_member_code(db: AsyncSession) -> str:
 
 
 def serialize_member(member: Member) -> dict:
-    """The public JSON shape of a member. Requires `team` and `subteam` loaded."""
+    """The public JSON shape of a member. Requires `team`, `subteam`, and `groups` loaded."""
     return {
         "member_code": member.member_code,
         "name": member.name,
@@ -40,9 +40,11 @@ def serialize_member(member: Member) -> dict:
             {"slug": member.subteam.slug, "label": member.subteam.label}
             if member.subteam else None
         ),
+        # Authorization group slugs — consumers gate admin sign-in / pick menus off these;
+        # resolve slug -> label via /api/groups. Emitted regardless of a group's is_active.
+        "groups": [g.slug for g in member.groups],
         "slack_user_id": member.slack_user_id,
         "is_active": member.is_active,
-        "is_lead": member.is_lead,
         # School year is useful roster metadata for consumers. Parent/guardian names are
         # intentionally NOT exposed on the API — that PII is only needed by the admin UI
         # (reads the ORM object) and Legion's own Slack push (operates in-process).
@@ -57,3 +59,7 @@ def serialize_team(team: Team) -> dict:
 
 def serialize_subteam(subteam: Subteam) -> dict:
     return {"slug": subteam.slug, "label": subteam.label, "is_active": subteam.is_active}
+
+
+def serialize_group(group: Group) -> dict:
+    return {"slug": group.slug, "label": group.label, "is_active": group.is_active}

@@ -1,0 +1,64 @@
+{% extends "admin/base.html" %}
+{% set active_page = "groups" %}
+{% block title %}{{ group.label }} — Legion Admin{% endblock %}
+
+{% block content %}
+<p class="mb-1"><a href="/admin/groups" class="text-muted small"><i class="bi bi-arrow-left"></i> User Groups</a></p>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0">{{ group.label }} <code class="text-muted fs-6">{{ group.slug }}</code>
+    {% if not group.is_active %}<span class="badge bg-secondary align-middle">Archived</span>{% endif %}
+  </h2>
+</div>
+
+{% if error %}
+<div class="alert alert-danger alert-dismissible fade show py-2"><i class="bi bi-exclamation-triangle me-1"></i> {{ error }}<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
+{% endif %}
+
+<div class="row g-3">
+  <div class="col-md-7">
+    <div class="card">
+      <div class="card-header">Members <span class="badge bg-secondary">{{ members|length }}</span></div>
+      <div class="card-body p-0">
+        <table class="table table-hover mb-0 align-middle">
+          <thead class="table-light"><tr><th>Name</th><th>Role</th><th></th></tr></thead>
+          <tbody>
+            {% for m in members %}
+            <tr>
+              <td><a href="/admin/members/{{ m.id }}/edit">{{ m.name }}</a></td>
+              <td>{{ m.role | rolelabel }}</td>
+              <td class="text-end">
+                <form method="post" action="/admin/groups/{{ group.id }}/members/{{ m.id }}/remove" class="d-inline">
+                  <button class="btn btn-sm btn-outline-danger">Remove</button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" class="text-center text-muted py-4">No members in this group yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-5">
+    <div class="card">
+      <div class="card-header">Add a member</div>
+      <div class="card-body">
+        {% if addable_members %}
+        <form method="post" action="/admin/groups/{{ group.id }}/members">
+          <div class="mb-3">
+            <select name="member_id" class="form-select" required>
+              <option value="" selected disabled>Choose a member…</option>
+              {% for m in addable_members %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm">Add to group</button>
+        </form>
+        {% else %}
+        <p class="text-muted small mb-0">Every active member is already in this group.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,5 +1,5 @@
-"""Legion's own /admin: SSO with `is_admin` is the normal path; the legacy password
-session is a break-glass fallback that keeps working alongside it."""
+"""Legion's own /admin: SSO with the `legion-admin` group is the normal path; the legacy
+password session is a break-glass fallback that keeps working alongside it."""
 from itsdangerous import URLSafeTimedSerializer
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -12,7 +12,9 @@ from app.services.sso import make_sso_token
 async def _loaded(db, member_id):
     return (
         await db.execute(
-            select(Member).options(selectinload(Member.team)).where(Member.id == member_id)
+            select(Member)
+            .options(selectinload(Member.team), selectinload(Member.groups))
+            .where(Member.id == member_id)
         )
     ).scalars().first()
 
@@ -24,7 +26,7 @@ async def test_no_cookie_redirects_to_sso_authorize(client):
 
 
 async def test_sso_admin_can_access_dashboard(client, db, make_member):
-    member = await make_member(name="Ada Lovelace", is_admin=True)
+    member = await make_member(name="Ada Lovelace", groups=["legion-admin"])
     member = await _loaded(db, member.id)
     client.cookies.set("mw_sso", make_sso_token(member))
 
@@ -33,7 +35,8 @@ async def test_sso_admin_can_access_dashboard(client, db, make_member):
 
 
 async def test_sso_non_admin_gets_forbidden(client, db, make_member):
-    member = await make_member(name="Grace Hopper", is_admin=False)
+    # In a group, but not legion-admin — a valid SSO identity with no Legion access.
+    member = await make_member(name="Grace Hopper", groups=["munus-admin"])
     member = await _loaded(db, member.id)
     client.cookies.set("mw_sso", make_sso_token(member))
 

@@ -43,6 +43,7 @@ key is configured the API returns `503` (fails closed).
 | GET | `/api/members/{member_code}` | One member by canonical code |
 | GET | `/api/teams` | All teams |
 | GET | `/api/subteams` | All subteams |
+| GET | `/api/groups` | All authorization groups (slug → label, active flag) |
 
 ```bash
 curl -H "X-API-Key: $LEGION_API_KEY" \
@@ -68,8 +69,8 @@ In-memory SQLite, real queries (no DB mocking).
 
 ## Deployment
 
-Deployed with Tempus/Munus from the `apps-infra` repo (Docker Compose + nginx) on
-container port 8002. See that repo's `docker-compose.yml`, `nginx.conf`, and `deploy.sh`.
+Deployed with Tempus/Munus from the `apps-infra` repo (Docker Compose + Nginx Proxy Manager) on
+container port 8002. See that repo's `docker-compose.yml` and `deploy.sh`.
 
 ## Student metadata
 
@@ -95,11 +96,12 @@ sent for students. Configure `SLACK_BOT_TOKEN` (blank = sync disabled) and, opti
 
 Columns: `role` (student|mentor, required), `name` (required), `team_number` (optional,
 must be an existing team), `subteam` (optional, a subteam slug), `slack_user_id`
-(optional, unique), `is_lead` (optional, mentors only), `grade` (optional, students only —
+(optional, unique), `grade` (optional, students only —
 a grade name like `Sophomore`), `parent_guardian_1` / `parent_guardian_2` (optional,
 students only). Existing members are matched by name (case-insensitive) and updated; new
-members get a fresh `member_code` and `username`. `is_admin` is deliberately not
-importable — granting Legion admin access always goes through the edit form.
+members get a fresh `member_code` and `username`. Group membership is deliberately not
+importable — granting admin access (any group) always goes through the edit form, so a
+roster upload can never quietly hand out permissions.
 
 ## Single sign-on
 
@@ -107,9 +109,10 @@ Legion is the SSO provider for the MARS/WARS apps. Every member gets an auto-gen
 stable `username` (`last.first`, each part truncated to 4 characters and lowercased —
 e.g. "Alexander Hamilton" -> `hami.alex`; collisions get a numeric suffix). There are no
 member passwords: signing in means entering your `username`, then approving a Slack DM
-push. Legion's own `/admin` runs on this too (gated on the member's `is_admin` flag),
-with the original `ADMIN_PASSWORD` login kept as a break-glass fallback for bootstrapping
-the first admin or recovering if Slack is down.
+push. Legion's own `/admin` runs on this too (gated on membership in the `legion-admin`
+group — see **User groups** below), with the original `ADMIN_PASSWORD` login kept as a
+break-glass fallback for bootstrapping the first admin (before anyone is in `legion-admin`)
+or recovering if Slack is down.
 
 **Flow:** `GET/POST /sso/authorize?app=<id>&return_to=<url>` (username form) ->
 `GET /sso/status/{nonce}` (the "check Slack" page polls this) -> `GET /sso/complete/{nonce}`
@@ -117,9 +120,23 @@ the first admin or recovering if Slack is down.
 itself lands on `POST /slack/interact`. If a valid session cookie already exists,
 `/sso/authorize` skips straight to redirecting back — real single sign-on across apps.
 
+**One-tap variant for a sibling app that already knows the member:** a Slack slash
+command or button click already tells the calling app *who* it is (the Slack user id in
+the payload) — making them type their Legion username too, just to re-derive an identity
+the caller already has, is pure friction. `POST /sso/challenge` (`X-API-Key`-authenticated,
+same trust boundary as the read API) skips the form: given a `member_code`, it creates the
+`AuthRequest` and sends the Slack push directly, returning `{nonce, expires_at}` (a longer
+`SSO_API_CHALLENGE_TTL` than the form flow's `SSO_CHALLENGE_TTL`, since there's a
+human-reads-a-Slack-message delay before any browser starts polling). The caller then sends
+its own user to `GET /sso/pending/{nonce}` — the same "check Slack" page `POST
+/sso/authorize` renders, just addressable by nonce alone; `/sso/status` and
+`/sso/complete` are unchanged and shared by both flows. See Munus's `services/legion_auth.py`
++ `GET /enter` for a full consumer-side implementation.
+
 **The cookie:** `mw_sso`, an `itsdangerous`-signed token (see `services/sso.py`) carrying
-`member_code`, `username`, `name`, `role`, `team_number`, `is_lead`, `is_admin`, and
-`slack_user_id`. Set with `Domain=SSO_COOKIE_DOMAIN` (e.g. `.marswars.org`) so one login
+`member_code`, `username`, `name`, `role`, `team_number`, `groups` (a list of
+group slugs — see below), and `slack_user_id`. Set with `Domain=SSO_COOKIE_DOMAIN`
+(e.g. `.marswars.org`) so one login
 covers every subdomain; `GET /sso/logout` clears it (single logout). A sibling app
 verifies it **locally** with the shared `SSO_SECRET` — no callback to Legion needed:
 
@@ -130,7 +147,41 @@ claims = signer.loads(request.cookies["mw_sso"], max_age=SSO_SESSION_TTL)  # rai
 ```
 
 On failure, redirect to `f"{LEGION_BASE_URL}/sso/authorize?app=<id>&return_to=<current-url>"`.
-(Tempus/Munus don't implement this client side yet — this is the contract for when they do.)
+Both Tempus (`/admin` only) and Munus (`/admin` **and** the student portal) implement this
+client-side already — see their `services/sso.py`.
+
+### User groups
+
+Legion carries admin-editable **user groups** — e.g. `Tempus Admin`, `Munus Admin`,
+`Munus Manager`, `Legion Admin`, `Legion Manager` — that a member can hold several of at
+once. They're managed entirely under **Admin → User Groups**: create / rename / archive a
+group there (exactly like Subteams — a stable `slug` the apps check plus a human `label`;
+archiving a group only hides it from new assignments and keeps it on existing members),
+then open a group's own page to see its members and add/remove people. Once archived, a
+group (or subteam) can be **permanently deleted** — any members still holding it just lose
+it (subteams clear the member's `subteam`; groups drop the membership row) rather than
+being blocked or themselves deleted. Membership is **not** set from the member create/edit
+forms — a member's groups only ever change from the group's page. The five groups above
+are seeded on first start; add your own freely.
+
+A member's group **slugs** are handed to every app on two surfaces so each app can decide
+what to allow and what to show:
+
+- **The `mw_sso` cookie** — the `groups` claim, read live on every request.
+- **The read API** — `groups` on each `/api/members` entry, with `/api/groups` resolving
+  a slug to its label + active flag.
+
+Two intended uses: **gate admin sign-in** (an app allows its admin area only for members
+whose `groups` contains its slug — e.g. Munus checks `"munus-admin"`) and **render
+different menus** per user. Legion eats its own dog food with two tiers on its *own*
+`/admin`: `legion-admin` gets everything, while `legion-manager` is deliberately narrow —
+routine roster upkeep (the dashboard, and member list/create/edit/regenerate-username)
+but nothing security-sensitive. A manager **cannot** touch group membership, create/edit
+groups or subteams/teams, run a CSV import, view the API-access/audit-log/backup pages, or
+perform destructive/bulk member actions (delete, restore, purge, bump grades, Slack sync)
+— all of those stay `legion-admin`-only. There is no separate `is_admin` flag — group
+membership is the one authorization concept, with the break-glass `ADMIN_PASSWORD` login
+as the only bypass (and it always has full admin access, matching `legion-admin`).
 
 **Abuse protection:** login attempts are rate-limited per browser (`mw_device` cookie)
 and per matched member — `SSO_RATE_MAX` attempts per `SSO_RATE_WINDOW` seconds, then a

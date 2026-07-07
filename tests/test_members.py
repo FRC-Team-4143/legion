@@ -10,7 +10,11 @@ async def _loaded(db, name):
     return (
         await db.execute(
             select(Member)
-            .options(selectinload(Member.team), selectinload(Member.subteam))
+            .options(
+                selectinload(Member.team),
+                selectinload(Member.subteam),
+                selectinload(Member.groups),
+            )
             .where(Member.name == name)
         )
     ).scalars().first()
@@ -41,12 +45,16 @@ async def test_serialize_member_shape(db, make_member):
 
     await make_member(
         name="Kay Ryan", role=MemberRole.mentor, team_number=4423,
-        subteam_slug="design", slack="U0LEAD", is_lead=True,
+        subteam_slug="design", slack="U0LEAD",
     )
     m = (
         await db.execute(
             select(Member)
-            .options(selectinload(Member.team), selectinload(Member.subteam))
+            .options(
+                selectinload(Member.team),
+                selectinload(Member.subteam),
+                selectinload(Member.groups),
+            )
             .where(Member.name == "Kay Ryan")
         )
     ).scalars().first()
@@ -56,7 +64,7 @@ async def test_serialize_member_shape(db, make_member):
     assert data["team_number"] == 4423
     assert data["subteam"] == {"slug": "design", "label": "Design"}
     assert data["slack_user_id"] == "U0LEAD"
-    assert data["is_lead"] is True
+    assert data["groups"] == []  # no groups assigned
     assert data["updated_at"].endswith("Z")
 
 
@@ -67,7 +75,11 @@ async def test_member_without_team_or_focus_serializes_null(db, make_member):
     m = (
         await db.execute(
             select(Member)
-            .options(selectinload(Member.team), selectinload(Member.subteam))
+            .options(
+                selectinload(Member.team),
+                selectinload(Member.subteam),
+                selectinload(Member.groups),
+            )
             .where(Member.name == "No Team")
         )
     ).scalars().first()

@@ -65,14 +65,7 @@
         <label class="form-label">Parent / Guardian 2 <small class="text-muted">(students only)</small></label>
         <input name="parent_guardian_2" class="form-control" maxlength="200" value="{{ member.parent_guardian_2 or '' }}">
       </div>
-      <div class="mb-3 form-check">
-        <input type="checkbox" class="form-check-input" name="is_lead" id="edit_is_lead" value="1" {% if member.is_lead %}checked{% endif %}>
-        <label class="form-check-label" for="edit_is_lead">Lead mentor <small class="text-muted">(mentors only)</small></label>
-      </div>
-      <div class="mb-3 form-check">
-        <input type="checkbox" class="form-check-input" name="is_admin" id="edit_is_admin" value="1" {% if member.is_admin %}checked{% endif %}>
-        <label class="form-check-label" for="edit_is_admin">Legion admin <small class="text-muted">(grants access to this admin site via SSO)</small></label>
-      </div>
+      <p class="text-muted small">Group membership is managed from <a href="/admin/groups">User Groups</a>, not here.</p>
       <button type="submit" class="btn btn-primary">Save</button>
     </form>
   </div>

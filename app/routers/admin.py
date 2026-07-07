@@ -15,15 +15,15 @@ from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database import get_db
 from app.models import (
-    AuditLog, GRADE_LABELS, GRADE_ORDER, Member, MemberRole,
-    StudentGrade, Subteam, Team, grade_label, role_label,
+    AuditLog, GRADE_LABELS, GRADE_ORDER, Group, Member, MemberRole,
+    StudentGrade, Subteam, Team, grade_label, member_user_groups, role_label,
 )
 from app.services import audit
 from app.services.members import generate_member_code
@@ -69,6 +69,8 @@ async def _active_subteams(db: AsyncSession):
     ).scalars().all()
 
 
+
+
 async def _slack_owner(db: AsyncSession, slack_uid: str, exclude_id: Optional[int] = None):
     """Return a member already using this Slack id (excluding exclude_id), or None."""
     q = select(Member).where(Member.slack_user_id == slack_uid)
@@ -79,10 +81,10 @@ async def _slack_owner(db: AsyncSession, slack_uid: str, exclude_id: Optional[in
 
 # ── Auth helpers ───────────────────────────────────────────────────────────────
 #
-# Admin access is normally SSO (`mw_sso` cookie with `is_admin: true`). The password
-# login below is a break-glass fallback — bootstrapping the very first admin (nobody
-# has `is_admin` yet) or recovering if Slack is down — so it's kept working alongside
-# SSO rather than replaced by it.
+# Admin access is normally SSO (`mw_sso` cookie carrying the `legion-admin` group). The
+# password login below is a break-glass fallback — bootstrapping the very first admin
+# (nobody is in `legion-admin` yet) or recovering if Slack is down — so it's kept working
+# alongside SSO rather than replaced by it.
 
 def _is_authenticated(request: Request) -> bool:
     token = request.cookies.get(_COOKIE)
@@ -95,10 +97,13 @@ def _is_authenticated(request: Request) -> bool:
     return True
 
 
-def _require_auth(request: Request):
+def _require_groups(request: Request, groups: set[str]):
+    """Gate a route on the SSO identity holding at least one of `groups`, or the
+    break-glass password session. Returns a redirect/403 to short-circuit the route
+    with, or None to let it proceed."""
     identity = sso_identity(request)
     if identity is not None:
-        if identity.get("is_admin") or _is_authenticated(request):
+        if groups & set(identity.get("groups") or []) or _is_authenticated(request):
             return None
         return templates.TemplateResponse(
             "admin/forbidden.html", {"request": request, "name": identity.get("name", "")},
@@ -108,6 +113,20 @@ def _require_auth(request: Request):
         return None
     return_to = quote(str(request.url.path), safe="")
     return RedirectResponse(f"/sso/authorize?app=legion&return_to={return_to}", status_code=303)
+
+
+def _require_auth(request: Request):
+    """Full admin access: the `legion-admin` group, or the break-glass password
+    session. Gates everything security-sensitive — groups, teams/subteams, CSV import,
+    API access info, audit log, backup, and destructive/bulk member actions."""
+    return _require_groups(request, {"legion-admin"})
+
+
+def _require_staff(request: Request):
+    """Routine roster upkeep: `legion-admin` OR `legion-manager`, or break-glass.
+    Deliberately narrow — day-to-day member CRUD only. Managers can't touch group
+    membership (that stays admin-only; see routers/admin.py's "User Groups" section)."""
+    return _require_groups(request, {"legion-admin", "legion-manager"})
 
 
 # ── Login / logout ─────────────────────────────────────────────────────────────
@@ -150,7 +169,7 @@ async def admin_logout():
 @router.get("", response_class=HTMLResponse)
 @router.get("/", response_class=HTMLResponse)
 async def admin_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
-    if redirect := _require_auth(request):
+    if redirect := _require_staff(request):
         return redirect
 
     async def _count(*conditions):
@@ -182,7 +201,7 @@ async def admin_members_list(
     show_archived: int = 0,
     db: AsyncSession = Depends(get_db),
 ):
-    if redirect := _require_auth(request):
+    if redirect := _require_staff(request):
         return redirect
 
     q = (
@@ -222,14 +241,12 @@ async def admin_members_create(
     team_id: Optional[str] = Form(None),
     subteam_id: Optional[str] = Form(None),
     slack_user_id: Optional[str] = Form(None),
-    is_lead: Optional[str] = Form(None),
-    is_admin: Optional[str] = Form(None),
     grade: Optional[str] = Form(None),
     parent_guardian_1: Optional[str] = Form(None),
     parent_guardian_2: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
-    if redirect := _require_auth(request):
+    if redirect := _require_staff(request):
         return redirect
 
     slack_uid = slack_user_id.strip() if slack_user_id else None
@@ -249,9 +266,8 @@ async def admin_members_create(
         team_id=_opt_id(team_id),
         subteam_id=_opt_id(subteam_id),
         slack_user_id=slack_uid,
-        is_lead=bool(is_lead) and role == MemberRole.mentor.value,
-        is_admin=bool(is_admin),
-        # Grade + guardians are student-only, gated like is_lead is mentor-only.
+        # Group membership is assigned from the User Groups page, not here.
+        # Grade + guardians are student-only.
         grade=_opt_grade(grade) if is_student else None,
         parent_guardian_1=(parent_guardian_1.strip() or None) if is_student and parent_guardian_1 else None,
         parent_guardian_2=(parent_guardian_2.strip() or None) if is_student and parent_guardian_2 else None,
@@ -264,7 +280,7 @@ async def admin_members_create(
 
 @router.get("/members/{member_id}/edit", response_class=HTMLResponse)
 async def admin_members_edit_get(member_id: int, request: Request, db: AsyncSession = Depends(get_db)):
-    if redirect := _require_auth(request):
+    if redirect := _require_staff(request):
         return redirect
     member = (await db.execute(select(Member).where(Member.id == member_id))).scalars().first()
     if not member:
@@ -292,14 +308,12 @@ async def admin_members_edit_post(
     team_id: Optional[str] = Form(None),
     subteam_id: Optional[str] = Form(None),
     slack_user_id: Optional[str] = Form(None),
-    is_lead: Optional[str] = Form(None),
-    is_admin: Optional[str] = Form(None),
     grade: Optional[str] = Form(None),
     parent_guardian_1: Optional[str] = Form(None),
     parent_guardian_2: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
-    if redirect := _require_auth(request):
+    if redirect := _require_staff(request):
         return redirect
     member = (await db.execute(select(Member).where(Member.id == member_id))).scalars().first()
     if not member:
@@ -319,8 +333,7 @@ async def admin_members_edit_post(
     member.team_id = _opt_id(team_id)
     member.subteam_id = _opt_id(subteam_id)
     member.slack_user_id = slack_uid
-    member.is_lead = bool(is_lead) and member.role == MemberRole.mentor
-    member.is_admin = bool(is_admin)
+    # Group membership is assigned from the User Groups page, not here.
     # Grade + guardians are student-only; clear them if the member is (now) a mentor.
     is_student = member.role == MemberRole.student
     member.grade = _opt_grade(grade) if is_student else None
@@ -335,7 +348,7 @@ async def admin_members_edit_post(
 async def admin_members_regenerate_username(member_id: int, request: Request, db: AsyncSession = Depends(get_db)):
     """Force a new SSO username — e.g. an admin doesn't like the auto-generated one, or
     it collided oddly. Anyone with the old one bookmarked will need the new one."""
-    if redirect := _require_auth(request):
+    if redirect := _require_staff(request):
         return redirect
     member = (await db.execute(select(Member).where(Member.id == member_id))).scalars().first()
     if member:
@@ -594,23 +607,213 @@ async def admin_subteams_edit(
 
 @router.post("/subteams/{group_id}/toggle")
 async def admin_subteams_toggle(group_id: int, request: Request, db: AsyncSession = Depends(get_db)):
-    """Retire / reactivate a subteam without deleting it (keeps historical assignments)."""
+    """Archive / restore a subteam without deleting it (keeps historical assignments)."""
     if redirect := _require_auth(request):
         return redirect
     group = (await db.execute(select(Subteam).where(Subteam.id == group_id))).scalars().first()
     if group:
         group.is_active = not group.is_active
-        state = "reactivated" if group.is_active else "retired"
+        state = "restored" if group.is_active else "archived"
         await audit.record(db, request, "subteam.toggle", f"{state.capitalize()} subteam {group.label}", entity_type="subteam", entity_id=group.id)
         await db.commit()
     return RedirectResponse("/admin/subteams", status_code=303)
 
 
+@router.post("/subteams/{group_id}/purge")
+async def admin_subteams_purge(group_id: int, request: Request, db: AsyncSession = Depends(get_db)):
+    """Permanently delete an archived subteam. Only allowed once archived. Any members
+    still assigned to it are detached (their subteam is cleared, not the member)."""
+    if redirect := _require_auth(request):
+        return redirect
+    group = (await db.execute(select(Subteam).where(Subteam.id == group_id))).scalars().first()
+    if group and not group.is_active:
+        label = group.label
+        await db.execute(update(Member).where(Member.subteam_id == group.id).values(subteam_id=None))
+        await audit.record(
+            db, request, "subteam.purge", f"Permanently deleted archived subteam {label}",
+            entity_type="subteam", entity_id=group_id,
+        )
+        await db.execute(delete(Subteam).where(Subteam.id == group_id))
+        await db.commit()
+    return RedirectResponse("/admin/subteams", status_code=303)
+
+
+# ── User Groups ────────────────────────────────────────────────────────────────
+
+@router.get("/groups", response_class=HTMLResponse)
+async def admin_groups_list(request: Request, db: AsyncSession = Depends(get_db)):
+    if redirect := _require_auth(request):
+        return redirect
+    rows = (
+        await db.execute(
+            select(Group, func.count(member_user_groups.c.member_id))
+            .outerjoin(member_user_groups, member_user_groups.c.group_id == Group.id)
+            .group_by(Group.id)
+            .order_by(Group.sort_order, Group.label)
+        )
+    ).all()
+    return templates.TemplateResponse(
+        "admin/groups.html",
+        {
+            "request": request,
+            "groups": [{"group": g, "count": c} for g, c in rows],
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.post("/groups")
+async def admin_groups_create(
+    request: Request,
+    label: str = Form(...),
+    slug: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_db),
+):
+    if redirect := _require_auth(request):
+        return redirect
+    the_slug = (slug.strip().lower() if slug and slug.strip() else _slugify(label))
+    if not the_slug:
+        return RedirectResponse("/admin/groups?error=Invalid+slug", status_code=303)
+    existing = (await db.execute(select(Group).where(Group.slug == the_slug))).scalars().first()
+    if existing:
+        return RedirectResponse(f"/admin/groups?error=Slug+{the_slug}+already+exists", status_code=303)
+    max_order = await db.scalar(select(func.max(Group.sort_order))) or 0
+    db.add(Group(slug=the_slug, label=label.strip(), sort_order=max_order + 1))
+    await audit.record(db, request, "group.create", f"Created group {label.strip()}", entity_type="group")
+    await db.commit()
+    return RedirectResponse("/admin/groups", status_code=303)
+
+
+@router.post("/groups/{group_id}/edit")
+async def admin_groups_edit(
+    group_id: int,
+    request: Request,
+    label: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    if redirect := _require_auth(request):
+        return redirect
+    group = (await db.execute(select(Group).where(Group.id == group_id))).scalars().first()
+    if group:
+        group.label = label.strip()
+        await audit.record(db, request, "group.edit", f"Renamed group to {group.label}", entity_type="group", entity_id=group.id)
+        await db.commit()
+    return RedirectResponse("/admin/groups", status_code=303)
+
+
+@router.post("/groups/{group_id}/toggle")
+async def admin_groups_toggle(group_id: int, request: Request, db: AsyncSession = Depends(get_db)):
+    """Archive / restore a group without deleting it (keeps existing assignments — an
+    archived group is only hidden from new member-form checkboxes)."""
+    if redirect := _require_auth(request):
+        return redirect
+    group = (await db.execute(select(Group).where(Group.id == group_id))).scalars().first()
+    if group:
+        group.is_active = not group.is_active
+        state = "restored" if group.is_active else "archived"
+        await audit.record(db, request, "group.toggle", f"{state.capitalize()} group {group.label}", entity_type="group", entity_id=group.id)
+        await db.commit()
+    return RedirectResponse("/admin/groups", status_code=303)
+
+
+@router.post("/groups/{group_id}/purge")
+async def admin_groups_purge(group_id: int, request: Request, db: AsyncSession = Depends(get_db)):
+    """Permanently delete an archived group. Only allowed once archived. Membership rows
+    are cleaned up automatically — an ORM-level delete so the many-to-many `member_user_
+    groups` rows are removed too, rather than left dangling."""
+    if redirect := _require_auth(request):
+        return redirect
+    group = (await db.execute(select(Group).where(Group.id == group_id))).scalars().first()
+    if group and not group.is_active:
+        label = group.label
+        await audit.record(
+            db, request, "group.purge", f"Permanently deleted archived group {label}",
+            entity_type="group", entity_id=group_id,
+        )
+        await db.delete(group)
+        await db.commit()
+    return RedirectResponse("/admin/groups", status_code=303)
+
+
+@router.get("/groups/{group_id}", response_class=HTMLResponse)
+async def admin_group_detail(group_id: int, request: Request, db: AsyncSession = Depends(get_db)):
+    """A group's own page: its current members, plus a form to add another one. This is
+    the only place membership is managed — not the member create/edit forms."""
+    if redirect := _require_auth(request):
+        return redirect
+    group = (
+        await db.execute(
+            select(Group).options(selectinload(Group.members)).where(Group.id == group_id)
+        )
+    ).scalars().first()
+    if not group:
+        return RedirectResponse("/admin/groups", status_code=303)
+    member_ids = {m.id for m in group.members}
+    all_active = (
+        await db.execute(
+            select(Member).where(Member.is_active.is_(True)).order_by(Member.name)
+        )
+    ).scalars().all()
+    return templates.TemplateResponse(
+        "admin/group_detail.html",
+        {
+            "request": request,
+            "group": group,
+            "members": sorted(group.members, key=lambda m: m.name),
+            "addable_members": [m for m in all_active if m.id not in member_ids],
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.post("/groups/{group_id}/members")
+async def admin_group_add_member(
+    group_id: int,
+    request: Request,
+    member_id: int = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    if redirect := _require_auth(request):
+        return redirect
+    group = (
+        await db.execute(
+            select(Group).options(selectinload(Group.members)).where(Group.id == group_id)
+        )
+    ).scalars().first()
+    member = (await db.execute(select(Member).where(Member.id == member_id))).scalars().first()
+    if group and member and member not in group.members:
+        group.members.append(member)
+        await audit.record(
+            db, request, "group.add_member", f"Added {member.name} to {group.label}",
+            entity_type="group", entity_id=group.id,
+        )
+        await db.commit()
+    return RedirectResponse(f"/admin/groups/{group_id}", status_code=303)
+
+
+@router.post("/groups/{group_id}/members/{member_id}/remove")
+async def admin_group_remove_member(
+    group_id: int, member_id: int, request: Request, db: AsyncSession = Depends(get_db)
+):
+    if redirect := _require_auth(request):
+        return redirect
+    group = (
+        await db.execute(
+            select(Group).options(selectinload(Group.members)).where(Group.id == group_id)
+        )
+    ).scalars().first()
+    member = (await db.execute(select(Member).where(Member.id == member_id))).scalars().first()
+    if group and member and member in group.members:
+        group.members.remove(member)
+        await audit.record(
+            db, request, "group.remove_member", f"Removed {member.name} from {group.label}",
+            entity_type="group", entity_id=group.id,
+        )
+        await db.commit()
+    return RedirectResponse(f"/admin/groups/{group_id}", status_code=303)
+
+
 # ── CSV Import ─────────────────────────────────────────────────────────────────
-
-def _truthy(value: str) -> bool:
-    return value.strip().lower() in ("1", "true", "yes", "y", "lead")
-
 
 def _grade_key(s: str) -> str:
     return s.strip().lower().replace(" ", "_").replace("-", "_")
@@ -663,7 +866,6 @@ async def admin_import_post(request: Request, file: UploadFile = File(...), db: 
         name = (row.get("name") or "").strip()
         team_str = (row.get("team_number") or "").strip()
         slack_uid = (row.get("slack_user_id") or "").strip() or None
-        lead = _truthy(row.get("is_lead") or "")
         subteam_str = (row.get("subteam") or "").strip().lower()
         grade_str = (row.get("grade") or "").strip()
         parent1 = (row.get("parent_guardian_1") or "").strip() or None
@@ -712,14 +914,14 @@ async def admin_import_post(request: Request, file: UploadFile = File(...), db: 
             existing.subteam_id = st.id if st else None
             if slack_uid:
                 existing.slack_user_id = slack_uid
-            existing.is_lead = lead and role == MemberRole.mentor
             existing.grade = grade if is_student else None
             existing.parent_guardian_1 = parent1 if is_student else None
             existing.parent_guardian_2 = parent2 if is_student else None
             updated.append(name)
         else:
-            # is_admin is deliberately not importable from CSV — granting Legion admin
-            # access is a privileged action that always goes through the edit form.
+            # Group membership is deliberately not importable from CSV — granting admin
+            # access (any group) is a privileged action that always goes through the edit
+            # form, so a roster upload can never quietly hand out permissions.
             db.add(Member(
                 name=name,
                 member_code=await generate_member_code(db),
@@ -728,7 +930,6 @@ async def admin_import_post(request: Request, file: UploadFile = File(...), db: 
                 team_id=team.id if team else None,
                 subteam_id=st.id if st else None,
                 slack_user_id=slack_uid,
-                is_lead=lead and role == MemberRole.mentor,
                 grade=grade if is_student else None,
                 parent_guardian_1=parent1 if is_student else None,
                 parent_guardian_2=parent2 if is_student else None,

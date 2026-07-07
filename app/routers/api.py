@@ -14,9 +14,9 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database import get_db
-from app.models import Member, MemberRole, Subteam, Team
+from app.models import Group, Member, MemberRole, Subteam, Team
 from app.services.members import (
-    serialize_member, serialize_subteam, serialize_team,
+    serialize_group, serialize_member, serialize_subteam, serialize_team,
 )
 from app.utils import parse_iso_utc
 
@@ -49,7 +49,11 @@ async def list_members(
     their local copies; pass `active=true` to get only the current roster."""
     q = (
         select(Member)
-        .options(selectinload(Member.team), selectinload(Member.subteam))
+        .options(
+            selectinload(Member.team),
+            selectinload(Member.subteam),
+            selectinload(Member.groups),
+        )
         .order_by(Member.name)
     )
 
@@ -77,7 +81,11 @@ async def get_member(member_code: str, db: AsyncSession = Depends(get_db)):
     member = (
         await db.execute(
             select(Member)
-            .options(selectinload(Member.team), selectinload(Member.subteam))
+            .options(
+                selectinload(Member.team),
+                selectinload(Member.subteam),
+                selectinload(Member.groups),
+            )
             .where(Member.member_code == member_code)
         )
     ).scalars().first()
@@ -94,7 +102,17 @@ async def list_teams(db: AsyncSession = Depends(get_db)):
 
 @router.get("/subteams", dependencies=[Depends(require_api_key)])
 async def list_subteams(db: AsyncSession = Depends(get_db)):
-    groups = (
+    subteams = (
         await db.execute(select(Subteam).order_by(Subteam.sort_order, Subteam.label))
     ).scalars().all()
-    return {"subteams": [serialize_subteam(g) for g in groups]}
+    return {"subteams": [serialize_subteam(s) for s in subteams]}
+
+
+@router.get("/groups", dependencies=[Depends(require_api_key)])
+async def list_groups(db: AsyncSession = Depends(get_db)):
+    """The authorization groups, so consumers can resolve a member's group slugs to
+    human labels and know which ones are currently active."""
+    groups = (
+        await db.execute(select(Group).order_by(Group.sort_order, Group.label))
+    ).scalars().all()
+    return {"groups": [serialize_group(g) for g in groups]}

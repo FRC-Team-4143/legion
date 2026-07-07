@@ -11,12 +11,14 @@ from app.services.sso import allowed_return_to, make_sso_token, read_sso_token
 
 
 async def _loaded(db, member_id):
-    """make_sso_token reads `member.team`, which needs eager loading under the async
-    ORM (bare lazy access raises MissingGreenlet) — mirrors the selectinload pattern
-    routers/sso.py itself uses before calling make_sso_token."""
+    """make_sso_token reads `member.team` and `member.groups`, which need eager loading
+    under the async ORM (bare lazy access raises MissingGreenlet) — mirrors the
+    selectinload pattern routers/sso.py itself uses before calling make_sso_token."""
     return (
         await db.execute(
-            select(Member).options(selectinload(Member.team)).where(Member.id == member_id)
+            select(Member)
+            .options(selectinload(Member.team), selectinload(Member.groups))
+            .where(Member.id == member_id)
         )
     ).scalars().first()
 
@@ -35,7 +37,7 @@ async def sso_config():
 
 
 async def test_token_round_trip(db, make_member, sso_config):
-    member = await make_member(name="Ada Lovelace", is_admin=True)
+    member = await make_member(name="Ada Lovelace", groups=["legion-admin", "munus-admin"])
     member = await _loaded(db, member.id)
     token = make_sso_token(member)
     claims = read_sso_token(token)
@@ -43,7 +45,7 @@ async def test_token_round_trip(db, make_member, sso_config):
     assert claims["member_code"] == member.member_code
     assert claims["username"] == member.username
     assert claims["name"] == "Ada Lovelace"
-    assert claims["is_admin"] is True
+    assert set(claims["groups"]) == {"legion-admin", "munus-admin"}
     assert claims["team_number"] == 4143
 
 
@@ -51,7 +53,10 @@ async def test_read_sso_token_rejects_tampered(db, make_member, sso_config):
     member = await make_member(name="Ada Lovelace")
     member = await _loaded(db, member.id)
     token = make_sso_token(member)
-    tampered = token[:-1] + ("A" if token[-1] != "A" else "B")
+    # Mutate a character in the payload region (index 2) rather than the very last
+    # signature char: flipping the final base64 char can land in unused padding bits and
+    # decode identically, so it's not a reliable tamper.
+    tampered = token[:2] + ("A" if token[2] != "A" else "B") + token[3:]
     assert read_sso_token(tampered) is None
 
 
@@ -69,7 +74,7 @@ async def test_read_sso_token_rejects_expired(db, make_member, sso_config):
 
 def test_read_sso_token_rejects_wrong_secret():
     other_signer = URLSafeTimedSerializer("a-different-secret", salt="mw-sso")
-    forged = other_signer.dumps({"member_code": "deadbeef", "is_admin": True})
+    forged = other_signer.dumps({"member_code": "deadbeef", "groups": ["legion-admin"]})
     assert read_sso_token(forged) is None
 
 

@@ -22,7 +22,9 @@ async def test_authorize_get_short_circuits_when_already_signed_in(client, db, m
     member = await make_member(name="Ada Lovelace")
     member = (
         await db.execute(
-            select(Member).options(selectinload(Member.team)).where(Member.id == member.id)
+            select(Member)
+            .options(selectinload(Member.team), selectinload(Member.groups))
+            .where(Member.id == member.id)
         )
     ).scalars().first()
     client.cookies.set("mw_sso", make_sso_token(member))

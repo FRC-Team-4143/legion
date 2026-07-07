@@ -46,7 +46,7 @@ def build_profile_fields(member: Member) -> dict:
     (empty string clears a stale value); Parent/Guardian fields are sent for students
     only — mentors never have guardians, so those field IDs are omitted entirely."""
     fields: dict[str, dict] = {
-        FIELD_TEAM: {"value": member.team.name if member.team else ""},
+        FIELD_TEAM: {"value": f"{member.team.number} - {member.team.name}" if member.team else ""},
         FIELD_SCHOOL_YEAR: {"value": grade_label(member.grade) if member.grade else ""},
         FIELD_SUBTEAM: {"value": member.subteam.label if member.subteam else ""},
     }

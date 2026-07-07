@@ -14,7 +14,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.models import (
-    DEFAULT_SUBTEAMS, DEFAULT_TEAMS, Member, MemberRole,
+    DEFAULT_GROUPS, DEFAULT_SUBTEAMS, DEFAULT_TEAMS, Group, Member, MemberRole,
     StudentGrade, Subteam, Team,
 )
 from app.services.username import assign_unique_username
@@ -48,13 +48,15 @@ async def engine():
     )
     async with eng.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    # Seed teams + focus groups the way init_db() would.
+    # Seed teams + subteams + groups the way init_db() would.
     sm = async_sessionmaker(eng, class_=AsyncSession, expire_on_commit=False)
     async with sm() as s:
         for number, name in DEFAULT_TEAMS:
             s.add(Team(number=number, name=name))
         for i, (slug, label) in enumerate(DEFAULT_SUBTEAMS):
             s.add(Subteam(slug=slug, label=label, sort_order=i))
+        for i, (slug, label) in enumerate(DEFAULT_GROUPS):
+            s.add(Group(slug=slug, label=label, sort_order=i))
         await s.commit()
     yield eng
     await eng.dispose()
@@ -83,10 +85,9 @@ async def make_member(db):
         subteam_slug: str | None = "software",
         slack: str | None = None,
         is_active: bool = True,
-        is_lead: bool = False,
         code: str | None = None,
         username: str | None = None,
-        is_admin: bool = False,
+        groups: list[str] | None = None,
         grade: StudentGrade | None = None,
         parent_guardian_1: str | None = None,
         parent_guardian_2: str | None = None,
@@ -99,6 +100,11 @@ async def make_member(db):
         if subteam_slug is not None:
             g = (await db.execute(select(Subteam).where(Subteam.slug == subteam_slug))).scalars().first()
             subteam_id = g.id if g else None
+        group_objs = []
+        if groups:
+            group_objs = (
+                await db.execute(select(Group).where(Group.slug.in_(groups)))
+            ).scalars().all()
         m = Member(
             name=name,
             member_code=code or secrets.token_hex(4),
@@ -108,8 +114,7 @@ async def make_member(db):
             subteam_id=subteam_id,
             slack_user_id=slack,
             is_active=is_active,
-            is_lead=is_lead,
-            is_admin=is_admin,
+            groups=group_objs,
             grade=grade,
             parent_guardian_1=parent_guardian_1,
             parent_guardian_2=parent_guardian_2,
