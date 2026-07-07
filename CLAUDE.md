@@ -44,6 +44,7 @@ app/
     api.py           # Read-only JSON API (X-API-Key protected) — the sync contract
     sso.py           # SSO endpoints: authorize / status / complete / logout
     slack.py         # Inbound Slack interactivity — SSO Approve/Deny button clicks
+    slack_dispatch.py # /slack/dispatch — shared interactivity relay (see below)
   services/
     members.py       # member_code generation + JSON serializers (shared by API + admin)
     username.py      # SSO username generation (last.first) + collision handling
@@ -115,6 +116,22 @@ are rate-limited + exponentially backed off per browser and per member
 (`services/throttle.py`); an unmatched username gets the identical "check Slack"
 response as a real one (no enumeration). See `AuthRequest` / `AuthThrottle` in
 `models.py` for the storage shape and `AuthStatus` for the challenge state machine.
+
+### Shared Slack interactivity dispatch (`routers/slack_dispatch.py`)
+Tempus, Munus, and Legion actually share one Slack app in production (identical bot
+token + signing secret across all three, despite each README saying to create a
+separate one) — outbound sends are fine to share, but Slack allows only **one**
+Interactivity Request URL per app, and all three want real button clicks. The shared
+app points that one URL at Legion's `POST /slack/dispatch` instead, which holds no
+business logic — it reads `action_id` (block actions) or `callback_id` (modal
+submissions) and forwards the original, byte-for-byte request to whichever app's own
+`/slack/interact` owns that namespace (`tempus_interact_url` / `munus_interact_url` /
+`legion_interact_url` in `config.py`; Legion's own `sso_*` actions loop back to its own
+`/slack/interact`). Each app still verifies the Slack signature itself on the forwarded
+copy — the dispatcher adds no new trust boundary and needs no signing secret of its
+own. Unrecognized action/callback ids are swallowed with a 200, matching every app's
+own "unknown action → no-op" convention. Slash commands don't route through this —
+each slash command has its own independently configurable Request URL already.
 
 ### Database migrations
 No Alembic. Add a `def _migration(conn)` guarded by `inspect(conn)` in `database.py` and

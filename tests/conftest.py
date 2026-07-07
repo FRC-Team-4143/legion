@@ -7,6 +7,7 @@ per-connection and would appear empty). Mirrors the sibling apps' test setup.
 """
 import secrets
 
+import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
@@ -17,6 +18,24 @@ from app.models import (
     StudentGrade, Subteam, Team,
 )
 from app.services.username import assign_unique_username
+
+
+@pytest.fixture(autouse=True)
+def _isolate_settings_from_dotenv():
+    """The test suite must not be sensitive to whatever's actually in the developer's
+    `.env` (production secrets, real cookie domains, a configured LEGION_API_KEY,
+    etc.) — reset every setting to its class default before each test, then restore
+    the real values after. Individual tests layer their own overrides on top via
+    fixtures like `api_key` / `sso_config` / `throttle_config` as needed."""
+    from app.config import Settings, settings
+
+    defaults = Settings(_env_file=None)
+    original = {name: getattr(settings, name) for name in Settings.model_fields}
+    for name in Settings.model_fields:
+        setattr(settings, name, getattr(defaults, name))
+    yield
+    for name, value in original.items():
+        setattr(settings, name, value)
 
 
 @pytest_asyncio.fixture

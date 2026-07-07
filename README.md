@@ -139,8 +139,20 @@ repeat offense (`services/throttle.py`). Submitting an unknown username gets the
 same "check Slack" response as a real one (no DM is sent) so the login form can't be used
 to enumerate valid usernames.
 
-**Slack app setup:** SSO needs its own bot token distinct from `SLACK_BOT_TOKEN` (which
-holds an admin *user* token, only good for the profile-sync's `users.profile.set`).
-Configure `SLACK_AUTH_BOT_TOKEN` (`xoxb-…`, scopes `chat:write` + `im:write`) and
-`SLACK_SIGNING_SECRET`, and point the Slack app's **Interactivity Request URL** at
-`https://<legion-host>/slack/interact`.
+**Slack app setup:** SSO needs a bot token distinct from `SLACK_BOT_TOKEN` (which holds
+an admin *user* token, only good for the profile-sync's `users.profile.set`). Configure
+`SLACK_AUTH_BOT_TOKEN` (`xoxb-…`, scopes `chat:write` + `im:write`) and `SLACK_SIGNING_SECRET`.
+
+In practice this is the **same Slack app Tempus and Munus already use** — despite each
+app's own README saying to create a separate one, all three actually share one bot
+token today. That's fine for *sending* messages (any number of services can use the
+same token), but Slack allows only **one Interactivity Request URL per app**, and all
+three services have their own `/slack/interact` wanting real button clicks. Rather than
+fight that, the shared app's Interactivity Request URL should point at Legion's
+**`/slack/dispatch`** (`routers/slack_dispatch.py`) — a stateless relay with no
+business logic of its own that reads each payload's `action_id`/`callback_id` and
+forwards the original, unmodified request to whichever app's own `/slack/interact`
+actually owns it (`tempus_interact_url` / `munus_interact_url` / `legion_interact_url`
+in `config.py`). Each app still verifies the Slack signature itself on the forwarded
+copy, so the dispatcher adds no new trust boundary. Slash commands don't need this —
+each slash command has its own independently configurable Request URL already.

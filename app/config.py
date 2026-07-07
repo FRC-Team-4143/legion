@@ -71,5 +71,18 @@ class Settings(BaseSettings):
     slack_auth_bot_token: str = ""
     slack_signing_secret: str = ""
 
+    # ── Shared Slack interactivity dispatch ─────────────────────────────────────
+    # Tempus, Munus, and Legion currently share ONE Slack app (same bot token +
+    # signing secret across all three .env files) — Slack allows only one
+    # Interactivity Request URL per app, so it's pointed at Legion's `/slack/dispatch`,
+    # which inspects each payload's action_id/callback_id and forwards the request,
+    # byte-for-byte, to whichever app's own `/slack/interact` actually owns it. Each
+    # app still verifies the Slack signature itself; the dispatcher is a stateless
+    # relay, not a new trust boundary. Slash commands don't need this — each slash
+    # command has its own independently configurable Request URL already.
+    tempus_interact_url: str = "http://tempus:8000/slack/interact"
+    munus_interact_url: str = "http://munus:8001/slack/interact"
+    legion_interact_url: str = "http://localhost:8002/slack/interact"
+
 
 settings = Settings()
