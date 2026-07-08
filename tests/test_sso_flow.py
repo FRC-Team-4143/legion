@@ -137,8 +137,12 @@ async def test_rate_limit_returns_429_after_max_attempts(client, db, make_member
 
 async def test_logout_clears_cookie(client):
     client.cookies.set("mw_sso", "whatever")
+    client.cookies.set("admin_session", "whatever")
     resp = await client.get("/sso/logout", follow_redirects=False)
     assert resp.status_code == 303
     # A cleared cookie is re-set with an immediate expiry, not merely absent from headers.
+    # Regression test: /sso/logout must clear the break-glass admin_session cookie too,
+    # not just mw_sso — otherwise a break-glass session survives "logout".
     set_cookie_headers = resp.headers.get_list("set-cookie")
     assert any("mw_sso=" in h for h in set_cookie_headers)
+    assert any("admin_session=" in h for h in set_cookie_headers)

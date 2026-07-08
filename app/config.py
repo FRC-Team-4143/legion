@@ -103,6 +103,15 @@ class Settings(BaseSettings):
     munus_interact_url: str = "http://munus:8001/slack/interact"
     legion_interact_url: str = "http://localhost:8002/slack/interact"
 
+    # ── Home page app launcher ──────────────────────────────────────────────────
+    # Public URLs for the sibling apps' tiles on Legion's signed-in home page ("/").
+    # Deliberately separate from tempus_interact_url/munus_interact_url above — those
+    # are internal Docker-network addresses for server-to-server calls, not something
+    # a member's own browser can resolve. Blank = that app's tile is simply omitted.
+    # Update when tuckers-workshop.xyz migrates to marswars.org (see SSO_COOKIE_DOMAIN).
+    tempus_public_url: str = ""
+    munus_public_url: str = ""
+
     @field_validator("admin_password", "session_secret", "sso_secret")
     @classmethod
     def _reject_insecure_secret(cls, v: str, info) -> str:

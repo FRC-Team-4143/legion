@@ -255,7 +255,11 @@ async def sso_complete(nonce: str, request: Request, db: AsyncSession = Depends(
 
 @router.get("/logout")
 async def sso_logout(return_to: str = "/"):
+    """Single logout: clears the shared `mw_sso` cookie. Also clears Legion's own
+    break-glass `admin_session` cookie (irrelevant to sibling apps, which don't have
+    one) so this is a complete sign-out no matter which mechanism authenticated."""
     target = allowed_return_to(return_to) or "/"
     response = RedirectResponse(target, status_code=303)
     clear_sso_cookie(response)
+    response.delete_cookie("admin_session")
     return response
