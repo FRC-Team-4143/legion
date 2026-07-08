@@ -738,9 +738,18 @@ async def admin_groups_purge(group_id: int, request: Request, db: AsyncSession =
     groups` rows are removed too, rather than left dangling."""
     if redirect := _require_auth(request):
         return redirect
-    group = (await db.execute(select(Group).where(Group.id == group_id))).scalars().first()
+    group = (
+        await db.execute(
+            select(Group).options(selectinload(Group.members)).where(Group.id == group_id)
+        )
+    ).scalars().first()
     if group and not group.is_active:
         label = group.label
+        # Purging drops this group's slug from every member's `groups` — bump each one
+        # so sibling apps' incremental sync notices (see add_member's comment above).
+        now = datetime.utcnow()
+        for member in group.members:
+            member.updated_at = now
         await audit.record(
             db, request, "group.purge", f"Permanently deleted archived group {label}",
             entity_type="group", entity_id=group_id,
@@ -798,6 +807,11 @@ async def admin_group_add_member(
     member = (await db.execute(select(Member).where(Member.id == member_id))).scalars().first()
     if group and member and member not in group.members:
         group.members.append(member)
+        # The member_user_groups association row is what actually changes here, not
+        # any column on `members` — so SQLAlchemy's onupdate wouldn't otherwise bump
+        # updated_at. Sibling apps' incremental sync (?updated_since=) relies on it
+        # to notice a pure group-membership change, so bump it explicitly.
+        member.updated_at = datetime.utcnow()
         await audit.record(
             db, request, "group.add_member", f"Added {member.name} to {group.label}",
             entity_type="group", entity_id=group.id,
@@ -820,6 +834,7 @@ async def admin_group_remove_member(
     member = (await db.execute(select(Member).where(Member.id == member_id))).scalars().first()
     if group and member and member in group.members:
         group.members.remove(member)
+        member.updated_at = datetime.utcnow()  # see add_member's comment above
         await audit.record(
             db, request, "group.remove_member", f"Removed {member.name} from {group.label}",
             entity_type="group", entity_id=group.id,

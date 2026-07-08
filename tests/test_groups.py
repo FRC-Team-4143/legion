@@ -1,6 +1,8 @@
 """User groups: seeding, M2M assignment, serialization, the SSO claim, the read API,
 admin CRUD (create / rename / archive / purge), and managing membership from the group's
 own page (not the member create/edit forms — see test_member_forms_have_no_group_controls)."""
+from datetime import datetime, timedelta
+
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -243,3 +245,60 @@ async def test_group_add_member_is_idempotent(client, db, make_member):
             f"/admin/groups/{grp.id}/members", data={"member_id": mid}, follow_redirects=False,
         )
     assert [g.slug for g in (await _member(db, mid)).groups] == ["tempus-admin"]
+
+
+# ── updated_at must bump on pure group-membership changes ──────────────────────
+# Regression tests: sibling apps' roster sync is incremental (?updated_since=), keyed
+# off Member.updated_at. Modifying the member_user_groups association table alone
+# doesn't trigger SQLAlchemy's onupdate on `members` — a group add/remove/purge must
+# bump updated_at explicitly, or a member whose *only* change was a group assignment
+# is invisible to every future sync.
+
+async def _backdate(db, member_id):
+    m = (await db.execute(select(Member).where(Member.id == member_id))).scalars().first()
+    m.updated_at = datetime.utcnow() - timedelta(days=1)
+    await db.commit()
+
+
+async def test_group_add_member_bumps_updated_at(client, db, make_member):
+    m = await make_member(name="New Person")
+    mid = m.id
+    await _backdate(db, mid)
+    await _login(client)
+    grp = await _group(db, "tempus-admin")
+
+    await client.post(f"/admin/groups/{grp.id}/members", data={"member_id": mid}, follow_redirects=False)
+
+    db.expire_all()
+    updated = (await db.execute(select(Member).where(Member.id == mid))).scalars().first()
+    assert updated.updated_at > datetime.utcnow() - timedelta(minutes=1)
+
+
+async def test_group_remove_member_bumps_updated_at(client, db, make_member):
+    m = await make_member(name="Grace Hopper", groups=["munus-admin"])
+    mid = m.id
+    await _backdate(db, mid)
+    await _login(client)
+    grp = await _group(db, "munus-admin")
+
+    await client.post(f"/admin/groups/{grp.id}/members/{mid}/remove", follow_redirects=False)
+
+    db.expire_all()
+    updated = (await db.execute(select(Member).where(Member.id == mid))).scalars().first()
+    assert updated.updated_at > datetime.utcnow() - timedelta(minutes=1)
+
+
+async def test_admin_purge_group_bumps_member_updated_at(client, db, make_member):
+    m = await make_member(name="Ada Lovelace", groups=["munus-admin"])
+    mid = m.id
+    await _backdate(db, mid)
+    await _login(client)
+    grp = await _group(db, "munus-admin")
+    grp_id = grp.id
+
+    await client.post(f"/admin/groups/{grp_id}/toggle", follow_redirects=False)  # archive first
+    await client.post(f"/admin/groups/{grp_id}/purge", follow_redirects=False)
+
+    db.expire_all()
+    updated = (await db.execute(select(Member).where(Member.id == mid))).scalars().first()
+    assert updated.updated_at > datetime.utcnow() - timedelta(minutes=1)
