@@ -21,12 +21,12 @@ def test_no_groups_or_role_yields_no_tiles():
 
 def test_legion_admin_tile():
     tiles = tiles_for(_identity(groups=["legion-admin"]))
-    assert tiles == [{"app": "Legion", "tier": "Admin", "url": "/admin", "icon": "bi-shield-lock"}]
+    assert tiles == [{"app": "Legion", "tier": "Admin", "url": "/admin", "icon": "bi-shield-lock", "kind": "staff"}]
 
 
 def test_legion_manager_tile_only_without_admin():
     tiles = tiles_for(_identity(groups=["legion-manager"]))
-    assert tiles == [{"app": "Legion", "tier": "Manager", "url": "/admin", "icon": "bi-shield-lock"}]
+    assert tiles == [{"app": "Legion", "tier": "Manager", "url": "/admin", "icon": "bi-shield-lock", "kind": "staff"}]
 
     # Holding both: admin takes precedence, only one Legion tile.
     both = tiles_for(_identity(groups=["legion-admin", "legion-manager"]))
@@ -43,8 +43,8 @@ def test_tempus_tiles_require_configured_public_url():
         settings.tempus_public_url = "https://tempus.example.org"
         tiles = tiles_for(_identity(groups=["tempus-admin"]))
         assert tiles == [
-            {"app": "Tempus", "tier": "Admin", "url": "https://tempus.example.org/admin", "icon": "bi-clock-history"},
-            {"app": "Tempus", "tier": "Shop Hours", "url": "https://tempus.example.org/me", "icon": "bi-stopwatch"},
+            {"app": "Tempus", "tier": "Admin", "url": "https://tempus.example.org/admin", "icon": "bi-clock-history", "kind": "staff"},
+            {"app": "Tempus", "tier": "Shop Hours", "url": "https://tempus.example.org/me", "icon": "bi-stopwatch", "kind": "personal"},
         ]
     finally:
         settings.tempus_public_url = original
@@ -57,8 +57,8 @@ def test_tempus_manager_tile():
 
         manager_tiles = tiles_for(_identity(groups=["tempus-manager"]))
         assert manager_tiles == [
-            {"app": "Tempus", "tier": "Manager", "url": "https://tempus.example.org/admin", "icon": "bi-clock-history"},
-            {"app": "Tempus", "tier": "Shop Hours", "url": "https://tempus.example.org/me", "icon": "bi-stopwatch"},
+            {"app": "Tempus", "tier": "Manager", "url": "https://tempus.example.org/admin", "icon": "bi-clock-history", "kind": "staff"},
+            {"app": "Tempus", "tier": "Shop Hours", "url": "https://tempus.example.org/me", "icon": "bi-stopwatch", "kind": "personal"},
         ]
 
         # Holding both: admin takes precedence, only one Admin/Manager tile (plus Shop Hours).
@@ -78,7 +78,7 @@ def test_tempus_shop_hours_tile_is_unconditional():
             tiles = tiles_for(_identity(role=role))
             assert tiles == [{
                 "app": "Tempus", "tier": "Shop Hours",
-                "url": "https://tempus.example.org/me", "icon": "bi-stopwatch",
+                "url": "https://tempus.example.org/me", "icon": "bi-stopwatch", "kind": "personal",
             }]
     finally:
         settings.tempus_public_url = original
@@ -92,13 +92,13 @@ def test_munus_admin_and_manager_tiles():
         admin_tiles = tiles_for(_identity(groups=["munus-admin"]))
         assert admin_tiles == [{
             "app": "Munus", "tier": "Admin",
-            "url": "https://munus.example.org/admin", "icon": "bi-heart",
+            "url": "https://munus.example.org/admin", "icon": "bi-heart", "kind": "staff",
         }]
 
         manager_tiles = tiles_for(_identity(groups=["munus-manager"]))
         assert manager_tiles == [{
             "app": "Munus", "tier": "Manager",
-            "url": "https://munus.example.org/admin", "icon": "bi-heart",
+            "url": "https://munus.example.org/admin", "icon": "bi-heart", "kind": "staff",
         }]
     finally:
         settings.munus_public_url = original
@@ -114,7 +114,7 @@ def test_munus_student_portal_tile():
         tiles = tiles_for(_identity(role="student"))
         assert tiles == [{
             "app": "Munus", "tier": "Volunteer Hours",
-            "url": "https://munus.example.org/me", "icon": "bi-clipboard-check",
+            "url": "https://munus.example.org/me", "icon": "bi-clipboard-check", "kind": "personal",
         }]
 
         # A student who's also a munus-manager gets both tiles independently.
@@ -132,6 +132,24 @@ def test_all_three_apps_together():
         tiles = tiles_for(_identity(groups=["legion-admin", "tempus-admin", "munus-admin"]))
         # Tempus now yields two tiles (Admin + the unconditional Shop Hours tile).
         assert [t["app"] for t in tiles] == ["Legion", "Tempus", "Tempus", "Munus"]
+    finally:
+        settings.tempus_public_url, settings.munus_public_url = original
+
+
+def test_tiles_grouped_by_kind():
+    """A member with both a staff group and a personal-tile-qualifying role gets
+    tiles tagged for both groupings (drives the "Your Apps" / "Admin Tools"
+    sections on the home page)."""
+    original = (settings.tempus_public_url, settings.munus_public_url)
+    try:
+        settings.tempus_public_url = "https://tempus.example.org"
+        settings.munus_public_url = "https://munus.example.org"
+        tiles = tiles_for(_identity(groups=["tempus-admin"], role="student"))
+        kinds = {t["app"]: t["kind"] for t in tiles if t["tier"] not in ("Admin", "Manager")}
+        staff = [t for t in tiles if t["kind"] == "staff"]
+        personal = [t for t in tiles if t["kind"] == "personal"]
+        assert [t["app"] for t in staff] == ["Tempus"]
+        assert {t["app"] for t in personal} == {"Tempus", "Munus"}
     finally:
         settings.tempus_public_url, settings.munus_public_url = original
 
@@ -178,3 +196,46 @@ async def test_root_with_no_matching_groups_shows_empty_state(client, db, make_m
     resp = await client.get("/")
     assert resp.status_code == 200
     assert "No apps assigned yet" in resp.text
+
+
+async def test_root_shows_both_section_headings_when_applicable(client, db, make_member):
+    original = settings.tempus_public_url
+    try:
+        settings.tempus_public_url = "https://tempus.example.org"
+        member = await make_member(name="Ada Admin", groups=["tempus-admin"])
+        loaded = (
+            await db.execute(
+                select(Member).options(selectinload(Member.team), selectinload(Member.groups))
+                .where(Member.id == member.id)
+            )
+        ).scalars().first()
+        client.cookies.set("mw_sso", make_sso_token(loaded))
+
+        resp = await client.get("/")
+        assert resp.status_code == 200
+        assert "Your Apps" in resp.text
+        assert "Admin Tools" in resp.text
+        assert "STAFF" in resp.text
+    finally:
+        settings.tempus_public_url = original
+
+
+async def test_root_shows_only_your_apps_for_plain_member(client, db, make_member):
+    original = settings.tempus_public_url
+    try:
+        settings.tempus_public_url = "https://tempus.example.org"
+        member = await make_member(name="Plain Member")
+        loaded = (
+            await db.execute(
+                select(Member).options(selectinload(Member.team), selectinload(Member.groups))
+                .where(Member.id == member.id)
+            )
+        ).scalars().first()
+        client.cookies.set("mw_sso", make_sso_token(loaded))
+
+        resp = await client.get("/")
+        assert resp.status_code == 200
+        assert "Your Apps" in resp.text
+        assert "Admin Tools" not in resp.text
+    finally:
+        settings.tempus_public_url = original

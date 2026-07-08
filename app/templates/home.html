@@ -11,7 +11,12 @@
     .page-wrap { max-width: 720px; margin: 0 auto; padding: 4rem 1.5rem; }
     h1 { color: #cc2200; font-weight: 700; }
     .text-muted { color: #9a7878 !important; }
+    .section-label {
+      color: #9a7878; font-size: 0.8rem; font-weight: 700;
+      letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 0.75rem;
+    }
     .tile {
+      position: relative;
       background: #111111; border: 1px solid #2a1a1a; border-radius: 10px;
       padding: 1.25rem; text-decoration: none; color: #f0e8e8;
       display: flex; align-items: center; gap: 1rem; transition: background .15s;
@@ -20,6 +25,13 @@
     .tile .bi { font-size: 1.8rem; color: #e05540; }
     .tile .tile-app { font-weight: 600; }
     .tile .tile-tier { color: #9a7878; font-size: 0.85rem; }
+    .tile-staff { border-color: #cc2200; }
+    .tile-badge {
+      position: absolute; top: 8px; right: 10px;
+      font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em;
+      color: #cc2200; background: rgba(204, 34, 0, 0.12);
+      border: 1px solid rgba(204, 34, 0, 0.4); border-radius: 4px; padding: 1px 6px;
+    }
     .empty-state { background: #111111; border: 1px solid #2a1a1a; border-radius: 10px; padding: 2rem; text-align: center; }
     .signout-link { color: #9a7878; }
     .signout-link:hover { color: #e05540; }
@@ -30,9 +42,13 @@
     <h1 class="mb-1">Hi, {{ name }}!</h1>
     <p class="text-muted mb-4">Your MARS/WARS apps</p>
 
-    {% if tiles %}
-    <div class="row g-3">
-      {% for tile in tiles %}
+    {% set personal_tiles = tiles | selectattr('kind', 'equalto', 'personal') | list %}
+    {% set staff_tiles = tiles | selectattr('kind', 'equalto', 'staff') | list %}
+
+    {% if personal_tiles %}
+    <div class="section-label">Your Apps</div>
+    <div class="row g-3 mb-4">
+      {% for tile in personal_tiles %}
       <div class="col-12 col-sm-6">
         <a class="tile" href="{{ tile.url }}">
           <i class="bi {{ tile.icon }}"></i>
@@ -44,7 +60,27 @@
       </div>
       {% endfor %}
     </div>
-    {% else %}
+    {% endif %}
+
+    {% if staff_tiles %}
+    <div class="section-label">Admin Tools</div>
+    <div class="row g-3">
+      {% for tile in staff_tiles %}
+      <div class="col-12 col-sm-6">
+        <a class="tile tile-staff" href="{{ tile.url }}">
+          <i class="bi {{ tile.icon }}"></i>
+          <div>
+            <div class="tile-app">{{ tile.app }}</div>
+            <div class="tile-tier">{{ tile.tier }}</div>
+          </div>
+          <span class="tile-badge">STAFF</span>
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if not tiles %}
     <div class="empty-state text-muted">
       No apps assigned yet — ask an admin to grant you access.
     </div>
