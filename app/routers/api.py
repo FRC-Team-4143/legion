@@ -117,6 +117,6 @@ async def list_groups(db: AsyncSession = Depends(get_db)):
     """The authorization groups, so consumers can resolve a member's group slugs to
     human labels and know which ones are currently active."""
     groups = (
-        await db.execute(select(Group).order_by(Group.sort_order, Group.label))
+        await db.execute(select(Group).order_by(Group.label))
     ).scalars().all()
     return {"groups": [serialize_group(g) for g in groups]}

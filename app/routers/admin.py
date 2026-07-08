@@ -692,7 +692,7 @@ async def admin_groups_list(request: Request, db: AsyncSession = Depends(get_db)
             select(Group, func.count(member_user_groups.c.member_id))
             .outerjoin(member_user_groups, member_user_groups.c.group_id == Group.id)
             .group_by(Group.id)
-            .order_by(Group.sort_order, Group.label)
+            .order_by(Group.label)
         )
     ).all()
     return templates.TemplateResponse(

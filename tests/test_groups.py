@@ -89,6 +89,14 @@ async def test_api_groups_requires_key(client):
     assert (await client.get("/api/groups")).status_code == 503
 
 
+async def test_api_groups_endpoint_orders_alphabetically_by_label(client, api_key):
+    """Seed order is legion/tempus/munus, so `sort_order` would put Tempus groups
+    before Munus ones — label order must not follow it."""
+    resp = await client.get("/api/groups", headers={"X-API-Key": api_key})
+    labels = [g["label"] for g in resp.json()["groups"]]
+    assert labels == sorted(labels)
+
+
 # ── Admin CRUD ───────────────────────────────────────────────────────────────
 
 async def test_admin_groups_page_renders(client):
@@ -96,6 +104,14 @@ async def test_admin_groups_page_renders(client):
     resp = await client.get("/admin/groups")
     assert resp.status_code == 200
     assert "Legion Admin" in resp.text
+
+
+async def test_admin_groups_page_lists_alphabetically_by_label(client):
+    """Same ordering guarantee as the API, at the admin page level."""
+    await _login(client)
+    resp = await client.get("/admin/groups")
+    text = resp.text
+    assert text.index("Munus Admin") < text.index("Tempus Admin")
 
 
 async def test_admin_create_group_derives_slug(client, db):
