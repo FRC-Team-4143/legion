@@ -39,11 +39,9 @@ _APP_COMMANDS: dict[str, list[tuple[str, str]]] = {
 def tiles_for(identity: dict) -> list[dict]:
     """Which MARS/WARS destinations this member's claims qualify them for.
 
-    Each tile: {app, tier, url, icon, kind, commands}. `kind` is "staff" (admin/
-    manager tiles) or "personal" (a member's own dashboard) — drives the grouping
-    and the staff badge on the home page. `commands` is that app's list of
-    (slash_command, description) pairs, same for every tile of a given app.
-    Nothing is shown for an app whose public
+    Each tile: {app, tier, url, icon, kind}. `kind` is "staff" (admin/manager
+    tiles) or "personal" (a member's own dashboard) — drives the grouping and
+    the staff badge on the home page. Nothing is shown for an app whose public
     URL isn't configured (settings.tempus_public_url / munus_public_url blank),
     even if the member otherwise holds the matching group — a missing URL would
     otherwise render a broken link.
@@ -92,9 +90,23 @@ def tiles_for(identity: dict) -> list[dict]:
                 "url": f"{settings.munus_public_url}/me", "icon": _PERSONAL_ICONS["Munus"], "kind": "personal",
             })
 
-    # Same command list on every tile for a given app, regardless of tier — see
-    # _APP_COMMANDS's docstring for why this isn't filtered further.
-    for tile in tiles:
-        tile["commands"] = _APP_COMMANDS.get(tile["app"], [])
-
     return tiles
+
+
+def commands_for(tiles: list[dict]) -> list[dict]:
+    """One entry per distinct app appearing in `tiles` that has registered Slack
+    commands, in first-seen order — feeds the page's own "Slack Commands" reference
+    section. Kept separate from the tile grid (rather than attached to each tile)
+    so a launcher tile's size doesn't depend on how many commands its app has, and
+    so an app with multiple tiles (e.g. both an Admin and a Shop Hours tile) only
+    lists its commands once.
+    """
+    seen_apps: set[str] = set()
+    sections: list[dict] = []
+    for tile in tiles:
+        app = tile["app"]
+        if app in seen_apps or app not in _APP_COMMANDS:
+            continue
+        seen_apps.add(app)
+        sections.append({"app": app, "icon": _APP_ICONS[app], "commands": _APP_COMMANDS[app]})
+    return sections

@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from app.database import init_db
 from app.routers import admin, api, slack, slack_dispatch, sso
-from app.services.home import tiles_for
+from app.services.home import commands_for, tiles_for
 from app.services.scheduler import create_scheduler
 from app.services.sso import sso_identity
 
@@ -39,7 +39,11 @@ async def root(request: Request):
     identity = sso_identity(request)
     if identity is None:
         return RedirectResponse("/sso/authorize?app=legion&return_to=%2F", status_code=303)
+    tiles = tiles_for(identity)
     return templates.TemplateResponse(
         "home.html",
-        {"request": request, "name": identity.get("name", ""), "tiles": tiles_for(identity)},
+        {
+            "request": request, "name": identity.get("name", ""),
+            "tiles": tiles, "commands": commands_for(tiles),
+        },
     )

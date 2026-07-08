@@ -25,9 +25,11 @@
     .tile .bi { font-size: 1.8rem; color: #e05540; }
     .tile .tile-app { font-weight: 600; }
     .tile .tile-tier { color: #9a7878; font-size: 0.85rem; }
-    .tile-commands { color: #9a7878; font-size: 0.75rem; margin-top: 0.4rem; }
-    .tile-commands code { color: #e05540; background: none; padding: 0; font-size: 0.75rem; }
     .tile-staff { border-color: #cc2200; }
+    .tile-static { align-items: flex-start; cursor: default; }
+    .tile-static:hover { background: #111111; color: #f0e8e8; }
+    .tile-commands { color: #9a7878; font-size: 0.75rem; }
+    .tile-commands code { color: #e05540; background: none; padding: 0; font-size: 0.75rem; }
     .tile-badge {
       position: absolute; top: 8px; right: 10px;
       font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em;
@@ -57,13 +59,6 @@
           <div>
             <div class="tile-app">{{ tile.app }}</div>
             <div class="tile-tier">{{ tile.tier }}</div>
-            {% if tile.commands %}
-            <div class="tile-commands">
-              {% for cmd, desc in tile.commands %}
-              <div><code>{{ cmd }}</code> — {{ desc }}</div>
-              {% endfor %}
-            </div>
-            {% endif %}
           </div>
         </a>
       </div>
@@ -81,13 +76,6 @@
           <div>
             <div class="tile-app">{{ tile.app }}</div>
             <div class="tile-tier">{{ tile.tier }}</div>
-            {% if tile.commands %}
-            <div class="tile-commands">
-              {% for cmd, desc in tile.commands %}
-              <div><code>{{ cmd }}</code> — {{ desc }}</div>
-              {% endfor %}
-            </div>
-            {% endif %}
           </div>
           <span class="tile-badge">STAFF</span>
         </a>
@@ -99,6 +87,27 @@
     {% if not tiles %}
     <div class="empty-state text-muted">
       No apps assigned yet — ask an admin to grant you access.
+    </div>
+    {% endif %}
+
+    {% if commands %}
+    <div class="section-label mt-4">Slack Commands</div>
+    <div class="row g-3">
+      {% for section in commands %}
+      <div class="col-12 col-sm-6">
+        <div class="tile tile-static">
+          <i class="bi {{ section.icon }}"></i>
+          <div>
+            <div class="tile-app">{{ section.app }}</div>
+            <div class="tile-commands">
+              {% for cmd, desc in section.commands %}
+              <div><code>{{ cmd }}</code> — {{ desc }}</div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
     </div>
     {% endif %}
 
