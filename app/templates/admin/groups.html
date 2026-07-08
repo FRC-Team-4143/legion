@@ -2,6 +2,17 @@
 {% set active_page = "groups" %}
 {% block title %}User Groups — Legion Admin{% endblock %}
 
+{% block head %}
+<style>
+  /* Click-to-sort column headers with a direction indicator (matches Tempus's/Munus's
+     report pages). */
+  .sortable-table th.sortable { cursor: pointer; user-select: none; }
+  .sortable-table th.sortable::after { content: "\2195"; opacity: .55; margin-left: .4em; font-size: 1.2em; }
+  .sortable-table th.sort-asc::after { content: "\25B2"; opacity: 1; font-size: .9em; color: #e05540; }
+  .sortable-table th.sort-desc::after { content: "\25BC"; opacity: 1; font-size: .9em; color: #e05540; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h2 class="mb-0">User Groups</h2>
@@ -16,13 +27,13 @@
 
 <div class="card">
   <div class="card-body p-0">
-    <table class="table table-hover mb-0 align-middle">
-      <thead class="table-light"><tr><th>Label</th><th>Slug</th><th>Members</th><th>Status</th><th></th></tr></thead>
+    <table class="table table-sm table-hover mb-0 align-middle sortable-table">
+      <thead class="table-light"><tr><th class="sortable" data-type="text">Label</th><th class="sortable" data-type="text">Slug</th><th>Members</th><th>Status</th><th></th></tr></thead>
       <tbody>
         {% for row in groups %}
         <tr {% if not row.group.is_active %}class="table-secondary"{% endif %}>
-          <td>{{ row.group.label }}</td>
-          <td><code class="text-muted">{{ row.group.slug }}</code></td>
+          <td data-sort="{{ row.group.label }}">{{ row.group.label }}</td>
+          <td data-sort="{{ row.group.slug }}"><code class="text-muted">{{ row.group.slug }}</code></td>
           <td><a href="/admin/groups/{{ row.group.id }}" class="badge bg-secondary text-decoration-none">{{ row.count }}</a></td>
           <td>{% if row.group.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Archived</span>{% endif %}</td>
           <td class="text-end">
@@ -85,4 +96,33 @@
     </form>
   </div></div>
 </div>
+
+<script>
+  // Click a column header to sort the table by that column; click again to reverse.
+  document.querySelectorAll('.sortable-table th.sortable').forEach(function (th) {
+    th.addEventListener('click', function () {
+      var table = th.closest('table');
+      var tbody = table.querySelector('tbody');
+      var idx = Array.prototype.indexOf.call(th.parentNode.children, th);
+      var numeric = th.dataset.type === 'num';
+      var asc = !th.classList.contains('sort-asc');
+
+      table.querySelectorAll('th.sortable').forEach(function (h) {
+        h.classList.remove('sort-asc', 'sort-desc');
+      });
+      th.classList.add(asc ? 'sort-asc' : 'sort-desc');
+
+      var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+      rows.sort(function (a, b) {
+        var av = a.children[idx].dataset.sort || '';
+        var bv = b.children[idx].dataset.sort || '';
+        var cmp = numeric
+          ? (parseFloat(av) || 0) - (parseFloat(bv) || 0)
+          : av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
+        return asc ? cmp : -cmp;
+      });
+      rows.forEach(function (r) { tbody.appendChild(r); });
+    });
+  });
+</script>
 {% endblock %}
