@@ -1,11 +1,13 @@
 """
-APScheduler jobs. Legion currently has a single scheduled job — a rotating nightly
-SQLite backup snapshot — mirroring the sibling apps' backup schedule.
+APScheduler jobs: a rotating nightly SQLite backup snapshot (mirroring the sibling
+apps' backup schedule), a nightly Slack custom-profile sync, and a frequent sweep that
+deletes aged SSO Approve/Deny DMs + their AuthRequest rows.
 """
 import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from app.config import settings
 
@@ -37,6 +39,22 @@ async def job_sync_slack_profiles() -> None:
         log.exception("Slack profile sync failed")
 
 
+async def job_purge_challenge_dms() -> None:
+    """Delete aged SSO Approve/Deny DMs (and their AuthRequest rows) so they don't pile
+    up in members' DM threads with the auth bot. No-op when Slack auth isn't configured."""
+    if not settings.slack_auth_bot_token:
+        return
+    try:
+        from app.database import AsyncSessionLocal
+        from app.services.slack_auth import purge_old_challenge_dms
+        async with AsyncSessionLocal() as db:
+            reaped = await purge_old_challenge_dms(db, settings.sso_dm_retention_minutes)
+        if reaped:
+            log.info("Purged %d old SSO challenge DM(s)", reaped)
+    except Exception:  # never let a Slack failure crash the scheduler
+        log.exception("SSO challenge DM purge failed")
+
+
 def register_jobs(scheduler: AsyncIOScheduler) -> None:
     """(Re)register scheduled jobs from current settings. Safe to call on a running
     scheduler (``replace_existing=True``)."""
@@ -63,6 +81,13 @@ def register_jobs(scheduler: AsyncIOScheduler) -> None:
             timezone=settings.timezone,
         ),
         id="slack_profile_sync",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        job_purge_challenge_dms,
+        IntervalTrigger(minutes=settings.sso_dm_cleanup_interval_minutes),
+        id="purge_challenge_dms",
         replace_existing=True,
     )
 

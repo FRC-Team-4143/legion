@@ -9,13 +9,16 @@ real bot token, `chat:write` + `im:write`) rather than the admin *user* token
 profiles but a bot token is what's needed to open DMs and receive button clicks.
 """
 import logging
+from datetime import datetime, timedelta
 from typing import Optional
 
 from slack_sdk.errors import SlackApiError
 from slack_sdk.web.async_client import AsyncWebClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models import Member
+from app.models import AuthRequest, Member
 
 log = logging.getLogger(__name__)
 
@@ -109,3 +112,51 @@ async def update_challenge_message(channel_id: Optional[str], ts: Optional[str],
         )
     except Exception as e:
         log.error("Failed to update SSO challenge message: %s", e)
+
+
+async def delete_challenge_message(channel_id: Optional[str], ts: Optional[str]) -> bool:
+    """Delete the challenge DM so old sign-in prompts don't pile up in the member's
+    DM thread with the auth bot. Returns True when the message is gone — deleted now,
+    already gone (`message_not_found`/`channel_not_found`), or there was never a DM to
+    delete (`channel_id`/`ts` is None) — so the caller can safely reap the row. Returns
+    False on any other error (e.g. `ratelimited`) so the row is kept and retried on the
+    next sweep. Never raises. A bot deleting its *own* messages needs only `chat:write`
+    (already held), so no extra scope over what `send_auth_challenge` uses."""
+    if not channel_id or not ts:
+        return True
+    try:
+        await get_auth_slack_client().chat_delete(channel=channel_id, ts=ts)
+        return True
+    except SlackApiError as e:
+        err = e.response.get("error", "")
+        if err in ("message_not_found", "channel_not_found"):
+            return True  # already gone — nothing left to delete
+        log.error("Failed to delete SSO challenge message: %s", err or e)
+        return False
+    except Exception as e:
+        log.error("Failed to delete SSO challenge message: %s", e)
+        return False
+
+
+async def purge_old_challenge_dms(db: AsyncSession, older_than_minutes: int) -> int:
+    """Delete challenge DMs (and their AuthRequest rows) older than the cutoff, returning
+    the number of rows reaped. Targets *every* aged row — approved/denied/expired plus
+    unmatched-username decoys that were never even edited — which both clears the DMs and
+    bounds the otherwise never-pruned `auth_requests` table. Oldest-first; a row whose DM
+    can't be deleted right now (transient Slack failure) is left for the next sweep."""
+    cutoff = datetime.utcnow() - timedelta(minutes=older_than_minutes)
+    rows = (
+        await db.execute(
+            select(AuthRequest)
+            .where(AuthRequest.created_at < cutoff)
+            .order_by(AuthRequest.created_at)
+        )
+    ).scalars().all()
+    reaped = 0
+    for req in rows:
+        if await delete_challenge_message(req.slack_channel_id, req.slack_message_ts):
+            await db.delete(req)
+            reaped += 1
+    if reaped:
+        await db.commit()
+    return reaped

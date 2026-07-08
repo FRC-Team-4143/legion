@@ -50,10 +50,10 @@ app/
     members.py       # member_code generation + JSON serializers (shared by API + admin)
     username.py      # SSO username generation (last.first) + collision handling
     sso.py           # mw_sso cookie mint/verify + device cookie + return_to allow-list
-    slack_auth.py    # Outbound SSO challenge DM (Approve/Deny) + message update
+    slack_auth.py    # Outbound SSO challenge DM (Approve/Deny) + message update/delete
     throttle.py      # SSO login rate limit / exponential backoff
     backup.py        # SQLite snapshot backup + staged restore (VACUUM INTO)
-    scheduler.py     # APScheduler: nightly backup
+    scheduler.py     # APScheduler: nightly backup, Slack profile sync, SSO DM cleanup sweep
     audit.py         # Append-only mutation log
   templates/admin/   # Jinja templates (extend admin/base.html; dark theme)
   templates/sso/     # Standalone SSO pages (username entry, "check Slack" polling)
@@ -131,6 +131,11 @@ are rate-limited + exponentially backed off per browser and per member
 (`services/throttle.py`); an unmatched username gets the identical "check Slack"
 response as a real one (no enumeration). See `AuthRequest` / `AuthThrottle` in
 `models.py` for the storage shape and `AuthStatus` for the challenge state machine.
+A background sweep (`scheduler.job_purge_challenge_dms` →
+`slack_auth.purge_old_challenge_dms`) deletes each challenge DM **and** its
+`AuthRequest` row once older than `SSO_DM_RETENTION_MINUTES` (default 15), so the auth
+bot's DM thread doesn't fill up and `auth_requests` stays bounded; the delete needs no
+scope beyond the `chat:write` the bot already uses to post/edit the DM.
 
 **One-tap variant for sibling apps (`POST /sso/challenge`, `GET /sso/pending/{nonce}`):**
 a caller that already knows *which* member it's dealing with (e.g. Munus resolving a

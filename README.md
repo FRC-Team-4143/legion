@@ -121,6 +121,14 @@ or recovering if Slack is down.
 itself lands on `POST /slack/interact`. If a valid session cookie already exists,
 `/sso/authorize` skips straight to redirecting back — real single sign-on across apps.
 
+**DM cleanup:** the Approve/Deny DMs the auth bot sends would otherwise pile up in each
+member's DM thread forever (they're edited to ✅/🚫 on a tap, never removed). A background
+sweep deletes each challenge DM **and** its `AuthRequest` row once older than
+`SSO_DM_RETENTION_MINUTES` (default 15; runs every `SSO_DM_CLEANUP_INTERVAL_MINUTES`,
+default 5) — so the thread stays tidy and the `auth_requests` table stays bounded. Well
+past the challenge TTLs, so a live sign-in is never reaped mid-flow; needs no Slack scope
+beyond the `chat:write` used to send the DM.
+
 **One-tap variant for a sibling app that already knows the member:** a Slack slash
 command or button click already tells the calling app *who* it is (the Slack user id in
 the payload) — making them type their Legion username too, just to re-derive an identity

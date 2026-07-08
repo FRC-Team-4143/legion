@@ -65,6 +65,15 @@ class Settings(BaseSettings):
     # polling tab.
     sso_api_challenge_ttl: int = 300  # 5 min
 
+    # Auto-delete the Approve/Deny challenge DMs (and their AuthRequest rows) once
+    # they're this old, so a member's DM thread with the auth bot doesn't fill up
+    # with stale sign-in prompts. 15 min is well past the max challenge TTL above,
+    # so a live sign-in is never reaped mid-flow. A background job sweeps every
+    # `sso_dm_cleanup_interval_minutes`, so a DM disappears ~retention+interval
+    # minutes after it's sent. See services/slack_auth.purge_old_challenge_dms.
+    sso_dm_retention_minutes: int = 15
+    sso_dm_cleanup_interval_minutes: int = 5
+
     # Login rate limit: `sso_rate_max` attempts per `sso_rate_window` seconds, per
     # browser (device cookie) and per matched member. Exceeding it locks the key for
     # `sso_backoff_base` seconds, multiplying by `sso_backoff_multiplier` on each
