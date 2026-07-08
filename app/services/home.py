@@ -23,10 +23,22 @@ def tiles_for(identity: dict) -> list[dict]:
     elif "legion-manager" in groups:
         tiles.append({"app": "Legion", "tier": "Manager", "url": "/admin", "icon": "bi-shield-lock"})
 
-    if settings.tempus_public_url and "tempus-admin" in groups:
+    if settings.tempus_public_url:
+        if "tempus-admin" in groups:
+            tiles.append({
+                "app": "Tempus", "tier": "Admin",
+                "url": f"{settings.tempus_public_url}/admin", "icon": "bi-clock-history",
+            })
+        elif "tempus-manager" in groups:
+            tiles.append({
+                "app": "Tempus", "tier": "Manager",
+                "url": f"{settings.tempus_public_url}/admin", "icon": "bi-clock-history",
+            })
+        # Unconditional — Tempus's personal page is open to every member (student or
+        # mentor), not gated on a role like Munus's student-only tile below.
         tiles.append({
-            "app": "Tempus", "tier": "Admin",
-            "url": f"{settings.tempus_public_url}/admin", "icon": "bi-clock-history",
+            "app": "Tempus", "tier": "Shop Hours",
+            "url": f"{settings.tempus_public_url}/me", "icon": "bi-stopwatch",
         })
 
     if settings.munus_public_url:
@@ -42,8 +54,8 @@ def tiles_for(identity: dict) -> list[dict]:
             })
         if role == "student":
             tiles.append({
-                "app": "Munus", "tier": "My Hours",
-                "url": f"{settings.munus_public_url}/", "icon": "bi-clipboard-check",
+                "app": "Munus", "tier": "Volunteer Hours",
+                "url": f"{settings.munus_public_url}/me", "icon": "bi-clipboard-check",
             })
 
     return tiles

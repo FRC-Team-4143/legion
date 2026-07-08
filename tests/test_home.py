@@ -34,7 +34,7 @@ def test_legion_manager_tile_only_without_admin():
     assert both[0]["tier"] == "Admin"
 
 
-def test_tempus_admin_tile_requires_configured_public_url():
+def test_tempus_tiles_require_configured_public_url():
     original = settings.tempus_public_url
     try:
         settings.tempus_public_url = ""
@@ -42,10 +42,44 @@ def test_tempus_admin_tile_requires_configured_public_url():
 
         settings.tempus_public_url = "https://tempus.example.org"
         tiles = tiles_for(_identity(groups=["tempus-admin"]))
-        assert tiles == [{
-            "app": "Tempus", "tier": "Admin",
-            "url": "https://tempus.example.org/admin", "icon": "bi-clock-history",
-        }]
+        assert tiles == [
+            {"app": "Tempus", "tier": "Admin", "url": "https://tempus.example.org/admin", "icon": "bi-clock-history"},
+            {"app": "Tempus", "tier": "Shop Hours", "url": "https://tempus.example.org/me", "icon": "bi-stopwatch"},
+        ]
+    finally:
+        settings.tempus_public_url = original
+
+
+def test_tempus_manager_tile():
+    original = settings.tempus_public_url
+    try:
+        settings.tempus_public_url = "https://tempus.example.org"
+
+        manager_tiles = tiles_for(_identity(groups=["tempus-manager"]))
+        assert manager_tiles == [
+            {"app": "Tempus", "tier": "Manager", "url": "https://tempus.example.org/admin", "icon": "bi-clock-history"},
+            {"app": "Tempus", "tier": "Shop Hours", "url": "https://tempus.example.org/me", "icon": "bi-stopwatch"},
+        ]
+
+        # Holding both: admin takes precedence, only one Admin/Manager tile (plus Shop Hours).
+        both = tiles_for(_identity(groups=["tempus-admin", "tempus-manager"]))
+        assert [t["tier"] for t in both] == ["Admin", "Shop Hours"]
+    finally:
+        settings.tempus_public_url = original
+
+
+def test_tempus_shop_hours_tile_is_unconditional():
+    """Unlike Munus's role-gated personal tile, Tempus's Shop Hours tile is open to
+    every signed-in member — students and mentors both attend the shop."""
+    original = settings.tempus_public_url
+    try:
+        settings.tempus_public_url = "https://tempus.example.org"
+        for role in ("student", "mentor"):
+            tiles = tiles_for(_identity(role=role))
+            assert tiles == [{
+                "app": "Tempus", "tier": "Shop Hours",
+                "url": "https://tempus.example.org/me", "icon": "bi-stopwatch",
+            }]
     finally:
         settings.tempus_public_url = original
 
@@ -79,13 +113,13 @@ def test_munus_student_portal_tile():
         settings.munus_public_url = "https://munus.example.org"
         tiles = tiles_for(_identity(role="student"))
         assert tiles == [{
-            "app": "Munus", "tier": "My Hours",
-            "url": "https://munus.example.org/", "icon": "bi-clipboard-check",
+            "app": "Munus", "tier": "Volunteer Hours",
+            "url": "https://munus.example.org/me", "icon": "bi-clipboard-check",
         }]
 
         # A student who's also a munus-manager gets both tiles independently.
         both = tiles_for(_identity(groups=["munus-manager"], role="student"))
-        assert {t["tier"] for t in both if t["app"] == "Munus"} == {"Manager", "My Hours"}
+        assert {t["tier"] for t in both if t["app"] == "Munus"} == {"Manager", "Volunteer Hours"}
     finally:
         settings.munus_public_url = original
 
@@ -96,7 +130,8 @@ def test_all_three_apps_together():
         settings.tempus_public_url = "https://tempus.example.org"
         settings.munus_public_url = "https://munus.example.org"
         tiles = tiles_for(_identity(groups=["legion-admin", "tempus-admin", "munus-admin"]))
-        assert [t["app"] for t in tiles] == ["Legion", "Tempus", "Munus"]
+        # Tempus now yields two tiles (Admin + the unconditional Shop Hours tile).
+        assert [t["app"] for t in tiles] == ["Legion", "Tempus", "Tempus", "Munus"]
     finally:
         settings.tempus_public_url, settings.munus_public_url = original
 
