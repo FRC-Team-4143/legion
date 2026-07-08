@@ -25,6 +25,8 @@
     .tile .bi { font-size: 1.8rem; color: #e05540; }
     .tile .tile-app { font-weight: 600; }
     .tile .tile-tier { color: #9a7878; font-size: 0.85rem; }
+    .tile-commands { color: #9a7878; font-size: 0.75rem; margin-top: 0.4rem; }
+    .tile-commands code { color: #e05540; background: none; padding: 0; font-size: 0.75rem; }
     .tile-staff { border-color: #cc2200; }
     .tile-badge {
       position: absolute; top: 8px; right: 10px;
@@ -55,6 +57,13 @@
           <div>
             <div class="tile-app">{{ tile.app }}</div>
             <div class="tile-tier">{{ tile.tier }}</div>
+            {% if tile.commands %}
+            <div class="tile-commands">
+              {% for cmd, desc in tile.commands %}
+              <div><code>{{ cmd }}</code> — {{ desc }}</div>
+              {% endfor %}
+            </div>
+            {% endif %}
           </div>
         </a>
       </div>
@@ -72,6 +81,13 @@
           <div>
             <div class="tile-app">{{ tile.app }}</div>
             <div class="tile-tier">{{ tile.tier }}</div>
+            {% if tile.commands %}
+            <div class="tile-commands">
+              {% for cmd, desc in tile.commands %}
+              <div><code>{{ cmd }}</code> — {{ desc }}</div>
+              {% endfor %}
+            </div>
+            {% endif %}
           </div>
           <span class="tile-badge">STAFF</span>
         </a>

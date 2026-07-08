@@ -5,12 +5,16 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.models import Member
-from app.services.home import tiles_for
+from app.services.home import _APP_COMMANDS, tiles_for
 from app.services.sso import make_sso_token
 
 
 def _identity(groups=(), role="mentor"):
     return {"groups": list(groups), "role": role}
+
+
+def _cmds(app: str) -> list[tuple[str, str]]:
+    return _APP_COMMANDS.get(app, [])
 
 
 # ── tiles_for() — pure logic, no DB/HTTP needed ─────────────────────────────────
@@ -21,12 +25,18 @@ def test_no_groups_or_role_yields_no_tiles():
 
 def test_legion_admin_tile():
     tiles = tiles_for(_identity(groups=["legion-admin"]))
-    assert tiles == [{"app": "Legion", "tier": "Admin", "url": "/admin", "icon": "bi-shield-lock", "kind": "staff"}]
+    assert tiles == [{
+        "app": "Legion", "tier": "Admin", "url": "/admin", "icon": "bi-shield-lock",
+        "kind": "staff", "commands": [],
+    }]
 
 
 def test_legion_manager_tile_only_without_admin():
     tiles = tiles_for(_identity(groups=["legion-manager"]))
-    assert tiles == [{"app": "Legion", "tier": "Manager", "url": "/admin", "icon": "bi-shield-lock", "kind": "staff"}]
+    assert tiles == [{
+        "app": "Legion", "tier": "Manager", "url": "/admin", "icon": "bi-shield-lock",
+        "kind": "staff", "commands": [],
+    }]
 
     # Holding both: admin takes precedence, only one Legion tile.
     both = tiles_for(_identity(groups=["legion-admin", "legion-manager"]))
@@ -43,8 +53,8 @@ def test_tempus_tiles_require_configured_public_url():
         settings.tempus_public_url = "https://tempus.example.org"
         tiles = tiles_for(_identity(groups=["tempus-admin"]))
         assert tiles == [
-            {"app": "Tempus", "tier": "Admin", "url": "https://tempus.example.org/admin", "icon": "bi-clock-history", "kind": "staff"},
-            {"app": "Tempus", "tier": "Shop Hours", "url": "https://tempus.example.org/me", "icon": "bi-stopwatch", "kind": "personal"},
+            {"app": "Tempus", "tier": "Admin", "url": "https://tempus.example.org/admin", "icon": "bi-clock-history", "kind": "staff", "commands": _cmds("Tempus")},
+            {"app": "Tempus", "tier": "Shop Hours", "url": "https://tempus.example.org/me", "icon": "bi-stopwatch", "kind": "personal", "commands": _cmds("Tempus")},
         ]
     finally:
         settings.tempus_public_url = original
@@ -57,8 +67,8 @@ def test_tempus_manager_tile():
 
         manager_tiles = tiles_for(_identity(groups=["tempus-manager"]))
         assert manager_tiles == [
-            {"app": "Tempus", "tier": "Manager", "url": "https://tempus.example.org/admin", "icon": "bi-clock-history", "kind": "staff"},
-            {"app": "Tempus", "tier": "Shop Hours", "url": "https://tempus.example.org/me", "icon": "bi-stopwatch", "kind": "personal"},
+            {"app": "Tempus", "tier": "Manager", "url": "https://tempus.example.org/admin", "icon": "bi-clock-history", "kind": "staff", "commands": _cmds("Tempus")},
+            {"app": "Tempus", "tier": "Shop Hours", "url": "https://tempus.example.org/me", "icon": "bi-stopwatch", "kind": "personal", "commands": _cmds("Tempus")},
         ]
 
         # Holding both: admin takes precedence, only one Admin/Manager tile (plus Shop Hours).
@@ -79,6 +89,7 @@ def test_tempus_shop_hours_tile_is_unconditional():
             assert tiles == [{
                 "app": "Tempus", "tier": "Shop Hours",
                 "url": "https://tempus.example.org/me", "icon": "bi-stopwatch", "kind": "personal",
+                "commands": _cmds("Tempus"),
             }]
     finally:
         settings.tempus_public_url = original
@@ -93,12 +104,14 @@ def test_munus_admin_and_manager_tiles():
         assert admin_tiles == [{
             "app": "Munus", "tier": "Admin",
             "url": "https://munus.example.org/admin", "icon": "bi-heart", "kind": "staff",
+            "commands": _cmds("Munus"),
         }]
 
         manager_tiles = tiles_for(_identity(groups=["munus-manager"]))
         assert manager_tiles == [{
             "app": "Munus", "tier": "Manager",
             "url": "https://munus.example.org/admin", "icon": "bi-heart", "kind": "staff",
+            "commands": _cmds("Munus"),
         }]
     finally:
         settings.munus_public_url = original
@@ -115,6 +128,7 @@ def test_munus_student_portal_tile():
         assert tiles == [{
             "app": "Munus", "tier": "Volunteer Hours",
             "url": "https://munus.example.org/me", "icon": "bi-clipboard-check", "kind": "personal",
+            "commands": _cmds("Munus"),
         }]
 
         # A student who's also a munus-manager gets both tiles independently.
@@ -154,6 +168,16 @@ def test_tiles_grouped_by_kind():
         settings.tempus_public_url, settings.munus_public_url = original
 
 
+def test_app_commands_content():
+    """Guards the actual command/description text, not just the wiring (the other
+    tests above build their expected `commands` via _cmds(), so they'd pass even if
+    this table's content silently drifted)."""
+    tempus_slugs = [cmd for cmd, _ in _APP_COMMANDS["Tempus"]]
+    assert tempus_slugs == ["/hours", "/shop", "/edit", "/qr"]
+    assert _APP_COMMANDS["Munus"] == [("/vhours", "Check your volunteer hours")]
+    assert "Legion" not in _APP_COMMANDS
+
+
 # ── GET / — route-level behavior ────────────────────────────────────────────────
 
 async def test_root_without_cookie_redirects_to_sso_authorize(client):
@@ -181,6 +205,43 @@ async def test_root_with_valid_cookie_renders_home_with_tiles(client, db, make_m
         assert "https://tempus.example.org/admin" in resp.text
     finally:
         settings.tempus_public_url = original
+
+
+async def test_root_shows_tempus_commands_for_tempus_tile(client, db, make_member):
+    original = settings.tempus_public_url
+    try:
+        settings.tempus_public_url = "https://tempus.example.org"
+        member = await make_member(name="Ada Admin", groups=["tempus-admin"])
+        loaded = (
+            await db.execute(
+                select(Member).options(selectinload(Member.team), selectinload(Member.groups))
+                .where(Member.id == member.id)
+            )
+        ).scalars().first()
+        client.cookies.set("mw_sso", make_sso_token(loaded))
+
+        resp = await client.get("/")
+        assert resp.status_code == 200
+        assert "/hours" in resp.text
+        assert "Check your weekly hours" in resp.text
+        assert "/shop" in resp.text
+    finally:
+        settings.tempus_public_url = original
+
+
+async def test_root_shows_no_commands_line_for_legion_only_tile(client, db, make_member):
+    member = await make_member(name="Legion Admin", groups=["legion-admin"])
+    loaded = (
+        await db.execute(
+            select(Member).options(selectinload(Member.team), selectinload(Member.groups))
+            .where(Member.id == member.id)
+        )
+    ).scalars().first()
+    client.cookies.set("mw_sso", make_sso_token(loaded))
+
+    resp = await client.get("/")
+    assert resp.status_code == 200
+    assert 'class="tile-commands"' not in resp.text
 
 
 async def test_root_with_no_matching_groups_shows_empty_state(client, db, make_member):
