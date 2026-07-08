@@ -16,7 +16,7 @@ port **8002**.
 ```bash
 python -m venv venv && source venv/bin/activate
 pip install -r requirements-dev.txt
-cp .env.example .env            # then edit ADMIN_PASSWORD / SESSION_SECRET / LEGION_API_KEY
+cp .env.example .env            # then edit ADMIN_PASSWORD / SESSION_SECRET / TEMPUS_API_KEY / MUNUS_API_KEY
 uvicorn app.main:app --reload --port 8002
 ```
 
@@ -34,8 +34,9 @@ fallback, `ADMIN_PASSWORD`.
 
 ### API
 
-All endpoints require the `X-API-Key` header (matched against `LEGION_API_KEY`). If no
-key is configured the API returns `503` (fails closed).
+All endpoints require the `X-API-Key` header, matched against either `TEMPUS_API_KEY` or
+`MUNUS_API_KEY` — each consumer has its own key, so leaking or rotating one never affects
+the other. If neither is configured the API returns `503` (fails closed).
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -46,7 +47,7 @@ key is configured the API returns `503` (fails closed).
 | GET | `/api/groups` | All authorization groups (slug → label, active flag) |
 
 ```bash
-curl -H "X-API-Key: $LEGION_API_KEY" \
+curl -H "X-API-Key: $TEMPUS_API_KEY" \
   "http://localhost:8002/api/members?role=student&active=true"
 ```
 

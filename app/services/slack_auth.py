@@ -29,8 +29,19 @@ def get_auth_slack_client() -> AsyncWebClient:
     return _client
 
 
+# Fixed, allowlisted labels — `app` is caller-supplied (a form field on the public SSO
+# page, or a body field on the server-to-server /sso/challenge endpoint) and this text
+# goes straight into a Slack mrkdwn block, so it must never echo the raw input back
+# (arbitrary pretext text, or even a Slack link, would otherwise be forgeable).
+_APP_LABELS = {
+    "tempus": "Tempus (attendance)",
+    "munus": "Munus (volunteer hours)",
+    "legion": "Legion (roster / SSO)",
+}
+
+
 def _challenge_blocks(nonce: str, app: str) -> list[dict]:
-    label = app or "a MARS/WARS app"
+    label = _APP_LABELS.get(app, "a MARS/WARS app")
     return [
         {
             "type": "section",

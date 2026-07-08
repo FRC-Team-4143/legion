@@ -63,3 +63,31 @@ async def test_password_login_still_sets_working_session(client):
         assert "admin_session" in resp.cookies
     finally:
         settings.admin_password = original
+
+
+async def test_break_glass_login_is_rate_limited(client):
+    """Regression test: unlimited password guesses against the break-glass login were
+    previously possible — it's now throttled the same way as the SSO push."""
+    original = (
+        settings.admin_password, settings.sso_rate_max, settings.sso_rate_window,
+        settings.sso_backoff_base, settings.sso_backoff_multiplier,
+    )
+    settings.admin_password = "correct-password"
+    settings.sso_rate_max = 3
+    settings.sso_rate_window = 300
+    settings.sso_backoff_base = 30
+    settings.sso_backoff_multiplier = 4
+    try:
+        for _ in range(3):
+            resp = await client.post("/admin/login", data={"password": "wrong"})
+            assert resp.status_code == 401
+
+        # The 4th attempt is throttled even with the correct password now.
+        resp = await client.post("/admin/login", data={"password": "correct-password"}, follow_redirects=False)
+        assert resp.status_code == 429
+        assert "admin_session" not in resp.cookies
+    finally:
+        (
+            settings.admin_password, settings.sso_rate_max, settings.sso_rate_window,
+            settings.sso_backoff_base, settings.sso_backoff_multiplier,
+        ) = original

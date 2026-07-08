@@ -1,17 +1,30 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Placeholder values shipped in .env.example — accepting these silently would let a
+# deploy that forgot to replace them run with a known, guessable secret.
+_INSECURE_DEFAULTS = {
+    "changeme",
+    "dev-secret-change-in-production",
+    "replace-with-a-long-random-string",
+}
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
-    # Admin web UI password.
-    admin_password: str = "changeme"
-    session_secret: str = "dev-secret-change-in-production"
+    # Admin web UI password. Required (no default) — a deploy that forgets to set
+    # this fails to start instead of silently running with a guessable value.
+    admin_password: str
+    session_secret: str
 
-    # Shared secret that Tempus / Munus present (as the `X-API-Key` header) to read
-    # the member roster from the JSON API. Blank = the API is disabled (returns 503),
-    # so a misconfigured deploy fails closed rather than serving data to anyone.
-    legion_api_key: str = ""
+    # Per-consumer secrets Tempus / Munus each present (as the `X-API-Key` header) to
+    # read the member roster from the JSON API and to hit /sso/challenge. Separate
+    # keys so a leak from one app's .env doesn't expose the other's, and either can be
+    # rotated independently. Both blank = the API is disabled (returns 503), so a
+    # misconfigured deploy fails closed rather than serving data to anyone.
+    tempus_api_key: str = ""
+    munus_api_key: str = ""
 
     database_url: str = "sqlite+aiosqlite:///./legion.db"
 
@@ -39,7 +52,7 @@ class Settings(BaseSettings):
     # `username`, approves a Slack DM push, and Legion sets a signed `mw_sso` cookie
     # every sibling app can verify locally. Separate from `session_secret` so rotating
     # this one doesn't also invalidate the admin break-glass password session.
-    sso_secret: str = "dev-secret-change-in-production"
+    sso_secret: str
     # Cookie `Domain=`, e.g. ".marswars.org", so one login covers every subdomain.
     # Blank = host-only cookie (fine for local dev across ports on one host).
     sso_cookie_domain: str = ""
@@ -89,6 +102,16 @@ class Settings(BaseSettings):
     tempus_interact_url: str = "http://tempus:8000/slack/interact"
     munus_interact_url: str = "http://munus:8001/slack/interact"
     legion_interact_url: str = "http://localhost:8002/slack/interact"
+
+    @field_validator("admin_password", "session_secret", "sso_secret")
+    @classmethod
+    def _reject_insecure_secret(cls, v: str, info) -> str:
+        if not v or v in _INSECURE_DEFAULTS:
+            raise ValueError(
+                f"{info.field_name} must be set to a real secret in .env — "
+                "it is blank or still the placeholder value from .env.example"
+            )
+        return v
 
 
 settings = Settings()

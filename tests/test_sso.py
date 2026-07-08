@@ -103,3 +103,10 @@ def test_allowed_return_to_blocks_unlisted_host(sso_config):
 def test_allowed_return_to_blank():
     assert allowed_return_to("") is None
     assert allowed_return_to(None) is None
+
+
+def test_allowed_return_to_blocks_backslash_bypass(sso_config):
+    """Regression test: some browsers normalize a leading backslash to '/', so
+    '/\\evil.com' must be rejected the same as '//evil.com'."""
+    assert allowed_return_to("/\\evil.example.com") is None
+    assert allowed_return_to("/\\/evil.example.com") is None

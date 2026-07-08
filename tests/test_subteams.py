@@ -7,8 +7,8 @@ from app.models import Member, Subteam
 
 
 async def _login(client):
-    # Default ADMIN_PASSWORD in tests is "changeme" (break-glass path).
-    await client.post("/admin/login", data={"password": "changeme"})
+    # Test admin_password is fixed in conftest.py's _isolate_settings_from_dotenv.
+    await client.post("/admin/login", data={"password": "test-admin-password"})
 
 
 async def _subteam(db, slug):

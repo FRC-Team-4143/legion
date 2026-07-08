@@ -17,6 +17,31 @@ async def test_api_rejects_wrong_key(client, api_key, make_member):
     assert resp.status_code == 401
 
 
+async def test_consumer_keys_are_independent(client, make_member):
+    """Regression test: Tempus's and Munus's keys must be independent — revoking one
+    must not affect the other, which is the actual point of splitting them."""
+    from app.config import settings
+    original = (settings.tempus_api_key, settings.munus_api_key)
+    try:
+        settings.tempus_api_key = "tempus-key"
+        settings.munus_api_key = "munus-key"
+        await make_member(name="Alice")
+
+        resp = await client.get("/api/members", headers={"X-API-Key": "tempus-key"})
+        assert resp.status_code == 200
+        resp = await client.get("/api/members", headers={"X-API-Key": "munus-key"})
+        assert resp.status_code == 200
+
+        # Revoke Munus's key only — Tempus's must keep working.
+        settings.munus_api_key = ""
+        resp = await client.get("/api/members", headers={"X-API-Key": "tempus-key"})
+        assert resp.status_code == 200
+        resp = await client.get("/api/members", headers={"X-API-Key": "munus-key"})
+        assert resp.status_code == 401
+    finally:
+        settings.tempus_api_key, settings.munus_api_key = original
+
+
 async def test_list_members_ok(client, api_key, make_member):
     await make_member(name="Alice", role=MemberRole.student)
     await make_member(name="Bob", role=MemberRole.mentor, slack="U0BOB")

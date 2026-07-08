@@ -25,7 +25,7 @@ from app.models import (
     AuditLog, GRADE_LABELS, GRADE_ORDER, Group, Member, MemberRole,
     StudentGrade, Subteam, Team, grade_label, member_user_groups, role_label,
 )
-from app.services import audit
+from app.services import audit, throttle
 from app.services.members import generate_member_code
 from app.services.sso import sso_identity
 from app.services.username import assign_unique_username
@@ -142,6 +142,16 @@ async def admin_login_post(
     password: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
+    # Same DB-backed throttle as the SSO push, keyed by IP instead of device/member —
+    # the break-glass password has no other rate limiting of its own.
+    client_ip = request.client.host if request.client else "unknown"
+    retry_after = await throttle.check_and_record(db, f"admin_login:{client_ip}", None)
+    if retry_after is not None:
+        return templates.TemplateResponse(
+            "admin/login.html",
+            {"request": request, "error": f"Too many attempts. Try again in {retry_after}s."},
+            status_code=429,
+        )
     if not hmac.compare_digest(password, settings.admin_password):
         await audit.record(db, request, "admin.login_failed", "Failed admin login attempt", actor="anonymous")
         await db.commit()
@@ -153,7 +163,7 @@ async def admin_login_post(
     await audit.record(db, request, "admin.login", "Admin signed in")
     await db.commit()
     response = RedirectResponse("/admin", status_code=303)
-    response.set_cookie(_COOKIE, _signer.dumps("admin"), httponly=True, samesite="lax", max_age=_MAX_AGE)
+    response.set_cookie(_COOKIE, _signer.dumps("admin"), httponly=True, samesite="lax", secure=True, max_age=_MAX_AGE)
     return response
 
 
@@ -188,7 +198,7 @@ async def admin_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     }
     return templates.TemplateResponse(
         "admin/dashboard.html",
-        {"request": request, "stats": stats, "api_enabled": bool(settings.legion_api_key)},
+        {"request": request, "stats": stats, "api_enabled": bool(settings.tempus_api_key or settings.munus_api_key)},
     )
 
 
@@ -320,6 +330,11 @@ async def admin_members_edit_post(
         return RedirectResponse("/admin/members", status_code=303)
 
     slack_uid = slack_user_id.strip() if slack_user_id else None
+    # Reassigning slack_user_id is the sole SSO identity-binding for this member — a
+    # manager could otherwise re-point a privileged member's Slack ID at themselves and
+    # self-approve the SSO push. Only full admin may change it, same as groups.
+    if slack_uid != member.slack_user_id and (redirect := _require_auth(request)):
+        return redirect
     if slack_uid and await _slack_owner(db, slack_uid, exclude_id=member.id):
         return RedirectResponse(
             f"/admin/members/{member_id}/edit?error=Slack+ID+{slack_uid}+is+already+linked+to+another+member",
@@ -961,8 +976,9 @@ async def admin_api_info(request: Request):
         "admin/api.html",
         {
             "request": request,
-            "api_key": settings.legion_api_key,
-            "api_enabled": bool(settings.legion_api_key),
+            "tempus_api_key": settings.tempus_api_key,
+            "munus_api_key": settings.munus_api_key,
+            "api_enabled": bool(settings.tempus_api_key or settings.munus_api_key),
         },
     )
 

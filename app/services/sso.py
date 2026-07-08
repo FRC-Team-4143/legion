@@ -56,7 +56,7 @@ def sso_identity(request: Request) -> Optional[dict]:
 def set_sso_cookie(response: Response, member: Member) -> None:
     response.set_cookie(
         SSO_COOKIE, make_sso_token(member),
-        httponly=True, samesite="lax", max_age=settings.sso_session_ttl,
+        httponly=True, samesite="lax", secure=True, max_age=settings.sso_session_ttl,
         domain=settings.sso_cookie_domain or None,
     )
 
@@ -76,7 +76,7 @@ def get_device_id(request: Request) -> str:
 def set_device_cookie(response: Response, device_id: str) -> None:
     response.set_cookie(
         DEVICE_COOKIE, device_id,
-        httponly=True, samesite="lax", max_age=DEVICE_MAX_AGE,
+        httponly=True, samesite="lax", secure=True, max_age=DEVICE_MAX_AGE,
         domain=settings.sso_cookie_domain or None,
     )
 
@@ -90,6 +90,14 @@ def allowed_return_to(url: Optional[str]) -> Optional[str]:
         return None
     parsed = urlparse(url)
     if not parsed.netloc:
-        return url if url.startswith("/") and not url.startswith("//") else None
+        # Reject a leading "//" (protocol-relative) and a leading "/\" or "\" — some
+        # browsers normalize a leading backslash to "/", turning "/\evil.com" into a
+        # protocol-relative redirect that bypasses the plain "//" check above.
+        is_relative = (
+            url.startswith("/")
+            and not url.startswith("//")
+            and not url.startswith("/\\")
+        )
+        return url if is_relative else None
     allowed = {h.strip() for h in settings.sso_allowed_return_hosts.split(",") if h.strip()}
     return url if parsed.hostname in allowed else None

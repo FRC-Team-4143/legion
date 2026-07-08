@@ -99,6 +99,51 @@ async def test_manager_cannot_delete_restore_purge_or_bulk_actions(client, db, m
     assert (await client.post("/admin/members/sync-slack")).status_code == 403
 
 
+async def test_manager_can_create_member_with_slack_id(client, db, make_member):
+    """Linking Slack on a brand-new (unprivileged) member is routine onboarding, not
+    an escalation vector — still fine for a manager."""
+    await _as_manager(client, db, make_member)
+    resp = await client.post(
+        "/admin/members",
+        data={"name": "New Person", "role": "student", "slack_user_id": "U0NEW"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    created = (await db.execute(select(Member).where(Member.name == "New Person"))).scalars().first()
+    assert created.slack_user_id == "U0NEW"
+
+
+async def test_manager_cannot_reassign_existing_members_slack_id(client, db, make_member):
+    """Regression test: a manager must not be able to re-point another member's
+    slack_user_id — doing so to a privileged member would let them self-approve the
+    SSO Slack push and mint a cookie carrying that member's groups."""
+    await _as_manager(client, db, make_member)
+    target = await make_member(name="Target Admin", groups=["legion-admin"])
+    target_id = target.id
+
+    resp = await client.post(
+        f"/admin/members/{target_id}/edit",
+        data={"name": "Target Admin", "role": "student", "slack_user_id": "U0ATTACKER"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 403
+    db.expire_all()
+    reloaded = (await db.execute(select(Member).where(Member.id == target_id))).scalars().first()
+    assert reloaded.slack_user_id is None
+
+    # Editing other fields without touching slack_user_id is still fine for a manager.
+    resp = await client.post(
+        f"/admin/members/{target_id}/edit",
+        data={"name": "Target Admin Renamed", "role": "student"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    db.expire_all()
+    reloaded = (await db.execute(select(Member).where(Member.id == target_id))).scalars().first()
+    assert reloaded.name == "Target Admin Renamed"
+    assert reloaded.slack_user_id is None
+
+
 async def test_legion_admin_still_has_full_access(client, db, make_member):
     """Sanity check the split didn't accidentally narrow the admin tier too."""
     member = await make_member(name="Ada Admin", groups=["legion-admin"])

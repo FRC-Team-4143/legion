@@ -29,7 +29,14 @@ def _isolate_settings_from_dotenv():
     fixtures like `api_key` / `sso_config` / `throttle_config` as needed."""
     from app.config import Settings, settings
 
-    defaults = Settings(_env_file=None)
+    # admin_password/session_secret/sso_secret have no class default (a real deploy
+    # must set them) — supply fixed test-only values here instead.
+    defaults = Settings(
+        _env_file=None,
+        admin_password="test-admin-password",
+        session_secret="test-session-secret",
+        sso_secret="test-sso-secret",
+    )
     original = {name: getattr(settings, name) for name in Settings.model_fields}
     for name in Settings.model_fields:
         setattr(settings, name, getattr(defaults, name))
@@ -128,12 +135,13 @@ async def make_member(db):
 
 @pytest_asyncio.fixture
 async def api_key():
-    """Configure a known API key for the duration of a test."""
+    """Configure a known API key (valid for either consumer) for the duration of a test."""
     from app.config import settings
-    original = settings.legion_api_key
-    settings.legion_api_key = "test-api-key"
+    original = (settings.tempus_api_key, settings.munus_api_key)
+    settings.tempus_api_key = "test-api-key"
+    settings.munus_api_key = "test-api-key"
     yield "test-api-key"
-    settings.legion_api_key = original
+    settings.tempus_api_key, settings.munus_api_key = original
 
 
 @pytest_asyncio.fixture
@@ -148,6 +156,8 @@ async def client(session_factory):
 
     app.dependency_overrides[get_db] = _override_get_db
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+    # https:// (not http://) so httpx's cookie jar honors the now-Secure mw_sso /
+    # admin_session cookies and sends them back on subsequent requests in-test.
+    async with httpx.AsyncClient(transport=transport, base_url="https://test") as c:
         yield c
     app.dependency_overrides.clear()

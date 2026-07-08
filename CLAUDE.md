@@ -18,8 +18,9 @@ uvicorn app.main:app --reload --port 8002
 ```
 
 Requires a `.env` file (see `.env.example`). Key vars: `ADMIN_PASSWORD`, `SESSION_SECRET`,
-`LEGION_API_KEY` (the shared secret Tempus/Munus present as `X-API-Key`; blank = API off),
-`SSO_SECRET`, `SLACK_AUTH_BOT_TOKEN` + `SLACK_SIGNING_SECRET` (SSO login — see below).
+`TEMPUS_API_KEY` + `MUNUS_API_KEY` (each consumer's own secret for the `X-API-Key` header;
+both blank = API off), `SSO_SECRET`, `SLACK_AUTH_BOT_TOKEN` + `SLACK_SIGNING_SECRET` (SSO
+login — see below).
 
 ## Testing
 
