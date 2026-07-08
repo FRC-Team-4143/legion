@@ -9,6 +9,15 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # admin_password/session_secret/sso_secret have no default (a real deploy must set
+    # them — see app/config.py) — Settings() runs at import time, before any test
+    # fixture can override it, so CI needs placeholder values just to collect tests.
+    # Never used against a real deployment; per-test values come from conftest.py's
+    # _isolate_settings_from_dotenv fixture regardless of what's set here.
+    env:
+      ADMIN_PASSWORD: ci-placeholder-admin-password
+      SESSION_SECRET: ci-placeholder-session-secret
+      SSO_SECRET: ci-placeholder-sso-secret
     steps:
       - uses: actions/checkout@v6
 
