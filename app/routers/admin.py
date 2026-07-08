@@ -97,6 +97,29 @@ def _is_authenticated(request: Request) -> bool:
     return True
 
 
+_SECTION_LABELS = [
+    ("/admin/groups", "User Groups"),
+    ("/admin/teams", "Teams"),
+    ("/admin/subteams", "Subteams"),
+    ("/admin/import", "Import"),
+    ("/admin/api", "API Access"),
+    ("/admin/audit", "Audit Log"),
+    ("/admin/backup", "Backup"),
+    ("/admin/members", "Members"),
+    ("/admin", "Dashboard"),
+]
+
+
+def _section_label(path: str) -> str:
+    """A human label for the section a denied request was aimed at, for the
+    forbidden page's message. Order matters — most-specific prefix first, since
+    "/admin" is itself a prefix of every other admin path."""
+    for prefix, label in _SECTION_LABELS:
+        if path.startswith(prefix):
+            return label
+    return "this page"
+
+
 def _require_groups(request: Request, groups: set[str]):
     """Gate a route on the SSO identity holding at least one of `groups`, or the
     break-glass password session. Returns a redirect/403 to short-circuit the route
@@ -106,7 +129,12 @@ def _require_groups(request: Request, groups: set[str]):
         if groups & set(identity.get("groups") or []) or _is_authenticated(request):
             return None
         return templates.TemplateResponse(
-            "admin/forbidden.html", {"request": request, "name": identity.get("name", "")},
+            "admin/forbidden.html",
+            {
+                "request": request,
+                "name": identity.get("name", ""),
+                "section": _section_label(request.url.path),
+            },
             status_code=403,
         )
     if _is_authenticated(request):

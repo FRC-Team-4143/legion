@@ -57,6 +57,38 @@ async def test_manager_cannot_manage_groups(client, db, make_member):
     assert (await client.post("/admin/groups", data={"label": "New Group"})).status_code == 403
 
 
+async def test_manager_denied_page_stays_in_admin_shell(client, db, make_member):
+    """Regression test: denial used to render a bare standalone document with no
+    sidebar — a dead end. It now stays inside the admin shell (full sidebar still
+    there and clickable) with a blurred placeholder + "No Access" badge naming the
+    section, so a manager can just click elsewhere instead of hitting a wall."""
+    await _as_manager(client, db, make_member)
+    resp = await client.get("/admin/teams")
+    assert resp.status_code == 403
+    assert 'href="/admin/members"' in resp.text  # sidebar still rendered
+    assert 'href="/admin/groups"' in resp.text
+    assert "No Access" in resp.text
+    assert "Teams" in resp.text
+
+
+async def test_fully_unauthorized_member_gets_same_shell_wrapped_page(client, db, make_member):
+    member = await make_member(name="Regular Member", groups=[])
+    loaded = (
+        await db.execute(
+            select(Member)
+            .options(selectinload(Member.team), selectinload(Member.groups))
+            .where(Member.id == member.id)
+        )
+    ).scalars().first()
+    client.cookies.set("mw_sso", make_sso_token(loaded))
+
+    resp = await client.get("/admin")
+    assert resp.status_code == 403
+    assert 'href="/admin/members"' in resp.text
+    assert "No Access" in resp.text
+    assert "Dashboard" in resp.text
+
+
 async def test_manager_cannot_view_or_edit_group_membership(client, db, make_member):
     await _as_manager(client, db, make_member)
     other = await make_member(name="Regular Member")
