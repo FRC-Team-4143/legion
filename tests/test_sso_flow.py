@@ -3,8 +3,10 @@
 without touching the network (see services/slack_auth.py) — we drive the Slack
 Approve/Deny outcome by writing directly to `AuthRequest`, as `/slack/interact` would.
 """
+from itsdangerous import URLSafeTimedSerializer
 from sqlalchemy import select
 
+from app.config import settings
 from app.models import AuthRequest, AuthStatus
 
 
@@ -146,3 +148,17 @@ async def test_logout_clears_cookie(client):
     set_cookie_headers = resp.headers.get_list("set-cookie")
     assert any("mw_sso=" in h for h in set_cookie_headers)
     assert any("admin_session=" in h for h in set_cookie_headers)
+
+
+async def test_admin_sidebar_logout_link_targets_root_not_admin(client):
+    """Regression test: the admin sidebar's Logout link used to send return_to=/admin,
+    which just bounced straight back into /admin's own sign-in gate — indistinguishable
+    from logout not having worked. It now targets "/" (the generic home page), matching
+    the user's preference to always land on Legion's root after signing out."""
+    signer = URLSafeTimedSerializer(settings.session_secret, salt="admin-session")
+    client.cookies.set("admin_session", signer.dumps("admin"))
+
+    resp = await client.get("/admin")
+    assert resp.status_code == 200
+    assert 'href="/sso/logout?return_to=%2F"' in resp.text
+    assert 'href="/sso/logout?return_to=%2Fadmin"' not in resp.text
