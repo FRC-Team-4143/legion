@@ -20,7 +20,7 @@ import secrets
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
@@ -54,6 +54,35 @@ def _append_state(target: str, state: str) -> str:
     return f"{target}{sep}state={state}"
 
 
+async def _dispatch_challenge(member_id: int, nonce: str, app: str) -> None:
+    """Send the Approve/Deny challenge DM off the request path, then record the DM's
+    channel/ts on the AuthRequest (needed to later edit/clean up the message).
+
+    Runs as a background task so the Slack round-trip doesn't happen inline for a matched
+    username — otherwise a valid username responds measurably slower than an unmatched one,
+    a timing oracle that undercuts the deliberate "identical page either way" anti-
+    enumeration design in `sso_authorize_post`. Opens its own session since the request's
+    is already closed by the time a background task runs. Never raises (send_auth_challenge
+    swallows Slack errors); a lost channel/ts just means the prompt DM isn't edited later."""
+    from app.database import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as db:
+        member = (
+            await db.execute(select(Member).where(Member.id == member_id))
+        ).scalars().first()
+        if member is None:
+            return
+        sent = await slack_auth.send_auth_challenge(member, nonce, app)
+        if not sent:
+            return
+        auth_request = (
+            await db.execute(select(AuthRequest).where(AuthRequest.nonce == nonce))
+        ).scalars().first()
+        if auth_request is not None:
+            auth_request.slack_channel_id, auth_request.slack_message_ts = sent
+            await db.commit()
+
+
 @router.get("/authorize", response_class=HTMLResponse)
 async def sso_authorize_get(request: Request, app: str = "", return_to: str = "/", state: str = ""):
     target = allowed_return_to(return_to) or "/"
@@ -73,6 +102,7 @@ async def sso_authorize_get(request: Request, app: str = "", return_to: str = "/
 @router.post("/authorize", response_class=HTMLResponse)
 async def sso_authorize_post(
     request: Request,
+    background_tasks: BackgroundTasks,
     username: str = Form(...),
     app: str = Form(""),
     return_to: str = Form("/"),
@@ -90,8 +120,9 @@ async def sso_authorize_post(
             )
         )
     ).scalars().first()
+    member_id = member.id if member is not None else None
 
-    retry_after = await throttle.check_and_record(db, device_id, member.id if member else None)
+    retry_after = await throttle.check_and_record(db, device_id, member_id)
     if retry_after is not None:
         page = templates.TemplateResponse(
             "sso/login.html",
@@ -111,7 +142,7 @@ async def sso_authorize_post(
     nonce = secrets.token_urlsafe(_NONCE_BYTES)
     auth_request = AuthRequest(
         nonce=nonce,
-        member_id=member.id if member else None,
+        member_id=member_id,
         app=app or None,
         return_to=target,
         state=state or None,
@@ -121,13 +152,13 @@ async def sso_authorize_post(
         expires_at=datetime.utcnow() + timedelta(seconds=settings.sso_challenge_ttl),
     )
     db.add(auth_request)
-    await db.flush()
-
-    if member is not None:
-        sent = await slack_auth.send_auth_challenge(member, nonce, app)
-        if sent:
-            auth_request.slack_channel_id, auth_request.slack_message_ts = sent
     await db.commit()
+
+    # Fire the Slack push off the request path (see `_dispatch_challenge`): a matched
+    # username must not take the Slack round-trip inline, or the response latency reveals
+    # that the username exists — an oracle the identical page above is meant to deny.
+    if member_id is not None:
+        background_tasks.add_task(_dispatch_challenge, member_id, nonce, app)
 
     page = templates.TemplateResponse(
         "sso/pending.html",

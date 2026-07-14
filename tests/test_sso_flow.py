@@ -137,6 +137,42 @@ async def test_rate_limit_returns_429_after_max_attempts(client, db, make_member
         settings.sso_rate_max, settings.sso_rate_window = original
 
 
+async def test_dispatch_challenge_persists_channel_ts(db, session_factory, make_member, monkeypatch):
+    """The challenge DM is sent off the request path (so a matched username doesn't take
+    the Slack round-trip inline — no enumeration timing oracle). `_dispatch_challenge`
+    opens its own session and records the DM's channel/ts back onto the AuthRequest."""
+    from datetime import datetime, timedelta
+
+    import app.database as database
+    import app.routers.sso as sso
+    from app.models import AuthRequest, AuthStatus
+    from app.services import slack_auth
+
+    # The background helper opens its own AsyncSessionLocal; point it at the test engine.
+    monkeypatch.setattr(database, "AsyncSessionLocal", session_factory)
+
+    async def _fake_send(member, nonce, app):
+        return ("C123", "1700000000.0001")
+
+    monkeypatch.setattr(slack_auth, "send_auth_challenge", _fake_send)
+
+    member = await make_member(name="Grace Hopper", slack="U1")
+    db.add(AuthRequest(
+        nonce="nonce-xyz", member_id=member.id, status=AuthStatus.pending,
+        expires_at=datetime.utcnow() + timedelta(seconds=60),
+    ))
+    await db.commit()
+
+    await sso._dispatch_challenge(member.id, "nonce-xyz", "tempus")
+
+    async with session_factory() as check:
+        row = (
+            await check.execute(select(AuthRequest).where(AuthRequest.nonce == "nonce-xyz"))
+        ).scalars().first()
+        assert row.slack_channel_id == "C123"
+        assert row.slack_message_ts == "1700000000.0001"
+
+
 async def test_logout_clears_cookie(client):
     client.cookies.set("mw_sso", "whatever")
     client.cookies.set("admin_session", "whatever")
