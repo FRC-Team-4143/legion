@@ -31,7 +31,7 @@ async def sso_config():
     from app.config import settings
     original = (settings.sso_session_ttl, settings.sso_allowed_return_hosts)
     settings.sso_session_ttl = 60 * 60 * 12
-    settings.sso_allowed_return_hosts = "time.marswars.org,volunteer.marswars.org,localhost"
+    settings.sso_allowed_return_hosts = "tempus.marswars.org,munus.marswars.org,localhost"
     yield settings
     settings.sso_session_ttl, settings.sso_allowed_return_hosts = original
 
@@ -92,7 +92,7 @@ def test_allowed_return_to_blocks_protocol_relative(sso_config):
 
 
 def test_allowed_return_to_allows_configured_host(sso_config):
-    url = "https://time.marswars.org/dashboard"
+    url = "https://tempus.marswars.org/dashboard"
     assert allowed_return_to(url) == url
 
 

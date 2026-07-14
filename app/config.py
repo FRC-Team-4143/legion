@@ -117,7 +117,6 @@ class Settings(BaseSettings):
     # Deliberately separate from tempus_interact_url/munus_interact_url above — those
     # are internal Docker-network addresses for server-to-server calls, not something
     # a member's own browser can resolve. Blank = that app's tile is simply omitted.
-    # Update when tuckers-workshop.xyz migrates to marswars.org (see SSO_COOKIE_DOMAIN).
     tempus_public_url: str = ""
     munus_public_url: str = ""
 
