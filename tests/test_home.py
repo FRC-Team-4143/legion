@@ -209,6 +209,12 @@ async def test_root_without_cookie_redirects_to_sso_authorize(client):
     assert resp.headers["location"] == "/sso/authorize?app=legion&return_to=%2F"
 
 
+async def test_sso_authorize_page_has_favicon(client):
+    resp = await client.get("/sso/authorize")
+    assert resp.status_code == 200
+    assert '<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">' in resp.text
+
+
 async def test_root_with_valid_cookie_renders_home_with_tiles(client, db, make_member):
     original = settings.tempus_public_url
     try:
