@@ -145,9 +145,19 @@ async def api_key():
 
 
 @pytest_asyncio.fixture
-async def client(session_factory):
-    """An httpx AsyncClient wired to the app with get_db overridden to the test DB."""
+async def client(session_factory, monkeypatch):
+    """An httpx AsyncClient wired to the app with get_db overridden to the test DB.
+
+    Also redirects app.database.AsyncSessionLocal to the same test engine: some code
+    (routers/sso.py's _dispatch_challenge background task, services/scheduler.py's
+    jobs) opens its own session via a function-local `from app.database import
+    AsyncSessionLocal` instead of the request-injected get_db, since that code runs
+    after the request's own session is already closed. Without this, those code paths
+    would silently hit the real on-disk legion.db instead of the test's in-memory DB —
+    passing only by accident if a stray legion.db with tables already exists locally,
+    and reliably failing with "no such table" on a clean checkout (e.g. CI)."""
     import httpx
+    import app.database as database_module
     from app.main import app
 
     async def _override_get_db():
@@ -155,6 +165,7 @@ async def client(session_factory):
             yield session
 
     app.dependency_overrides[get_db] = _override_get_db
+    monkeypatch.setattr(database_module, "AsyncSessionLocal", session_factory)
     transport = httpx.ASGITransport(app=app)
     # https:// (not http://) so httpx's cookie jar honors the now-Secure mw_sso /
     # admin_session cookies and sends them back on subsequent requests in-test.
