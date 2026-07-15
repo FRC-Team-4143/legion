@@ -36,7 +36,6 @@ _ACTION_ID_EXACT = {
     "review_edit": "munus",
     "submission_approve": "munus",
     "submission_reject": "munus",
-    "opp_dashboard": "munus",
     "sso_approve": "legion",
     "sso_deny": "legion",
 }

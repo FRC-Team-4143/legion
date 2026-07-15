@@ -34,7 +34,7 @@ def test_routes_tempus_prefixed_action_id():
 def test_routes_munus_action_ids():
     for action_id in (
         "hours_quick", "hours_adjust", "review_edit",
-        "submission_approve", "submission_reject", "opp_dashboard",
+        "submission_approve", "submission_reject",
     ):
         assert resolve_target(_block_action(action_id)) == settings.munus_interact_url
 
