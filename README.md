@@ -85,7 +85,7 @@ every active student one grade; seniors graduate to **Alumni** and are archived.
 
 Legion can push a member's **Team**, **School Year** (grade), **Subteam**, and
 **Parent/Guardian 1 & 2** into their Slack custom profile fields — manual-only, via the
-**Sync Slack Profiles** button on the Members page (no scheduled job). Guardian fields
+**Sync Slack Profiles** button on the Members page. Guardian fields
 are only sent for students. Configure `SLACK_BOT_TOKEN` (blank = sync disabled).
 
 > **Token:** editing *another* user's profile via `users.profile.set` requires an admin
