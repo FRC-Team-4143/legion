@@ -2,8 +2,8 @@
 Slack profile sync — pushes each member's roster metadata into their Slack *custom
 profile fields* (Team, School Year, Subteam, Parent/Guardian 1 & 2).
 
-Legion is the source of truth, so this is a one-way push out to Slack: a nightly
-scheduled job (`services/scheduler.py`) and an on-demand admin button both call
+Legion is the source of truth, so this is a one-way push out to Slack: manual-only,
+triggered by an admin button (`POST /admin/members/sync-slack`) which calls
 `sync_all_profiles`. Mirrors the cached-client + swallow-and-log discipline of the
 sibling apps' `slack_client.py`.
 
@@ -56,12 +56,10 @@ def build_profile_fields(member: Member) -> dict:
     return fields
 
 
-async def push_member_profile(member: Member, *, automated: bool = False) -> bool:
+async def push_member_profile(member: Member) -> bool:
     """Push one member's metadata to their Slack profile. Returns True on success,
     False if the member has no Slack id, the sync is disabled, or the call fails
-    (never raises — a Slack outage must not crash the caller or the scheduler)."""
-    if automated and not settings.updates_enabled:
-        return False
+    (never raises — a Slack outage must not crash the caller)."""
     if not member.slack_user_id or not settings.slack_bot_token:
         return False
     try:
@@ -75,7 +73,7 @@ async def push_member_profile(member: Member, *, automated: bool = False) -> boo
         return False
 
 
-async def sync_all_profiles(db: AsyncSession, *, automated: bool = False) -> dict:
+async def sync_all_profiles(db: AsyncSession) -> dict:
     """Push every active member with a Slack id. Returns {sent, skipped, failed}."""
     members = (
         await db.execute(
@@ -88,7 +86,7 @@ async def sync_all_profiles(db: AsyncSession, *, automated: bool = False) -> dic
 
     sent = failed = 0
     for m in members:
-        if await push_member_profile(m, automated=automated):
+        if await push_member_profile(m):
             sent += 1
         else:
             failed += 1

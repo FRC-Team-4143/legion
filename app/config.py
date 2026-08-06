@@ -33,19 +33,14 @@ class Settings(BaseSettings):
     # Slack: pushes member metadata into each person's custom profile fields.
     # NOTE: setting *another* user's profile requires an admin *user* token (xoxp-…)
     # with users.profile:write — a normal bot token can only edit its own profile.
-    # Blank = the Slack sync (nightly job + manual button) is disabled.
+    # Blank = the Slack sync is disabled. Manual-only (admin button), not scheduled.
     slack_bot_token: str = ""
-    slack_sync_time: str = "01:00"  # HH:MM 24h local time for the nightly profile sync
-    slack_sync_day: str = "*"  # day(s) of week to sync (cron style; * = every day)
 
     # Database backups (SQLite only)
     backup_dir: str = "backups"
     backup_keep: int = 14  # number of snapshots to retain
     backup_time: str = "23:30"  # HH:MM 24h local time for the weekly snapshot
     backup_day: str = "sun"  # day of week for the weekly backup (mon-sun)
-
-    # Global toggle for scheduled jobs (currently just the backup snapshot).
-    updates_enabled: bool = True
 
     # ── SSO ──────────────────────────────────────────────────────────────────────
     # Legion is the identity provider for the MARS/WARS apps: a member enters their

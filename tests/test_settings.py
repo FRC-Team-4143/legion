@@ -24,8 +24,6 @@ def _form(**overrides):
     """A complete settings form pre-filled from the current singleton."""
     form = {
         "timezone": settings.timezone,
-        "slack_sync_time": settings.slack_sync_time,
-        "slack_sync_day": settings.slack_sync_day,
         "backup_time": settings.backup_time,
         "backup_day": settings.backup_day,
         "backup_keep": settings.backup_keep,
@@ -42,20 +40,15 @@ async def test_settings_post_writes_env_and_updates_singleton(client, tmp_path, 
 
     # Known baseline so each POSTed value is an actual change.
     settings.timezone = "America/New_York"
-    settings.slack_sync_time = "01:00"
-    settings.slack_sync_day = "*"
     settings.backup_day = "sun"
     settings.backup_time = "23:30"
     settings.backup_keep = 14
 
     resp = await client.post("/admin/settings", data=_form(
         timezone="America/Denver",
-        slack_sync_time="02:30",
-        slack_sync_day="mon",
         backup_day="fri",
         backup_time="02:15",
         backup_keep="21",
-        updates_enabled="true",
     ), follow_redirects=False)
 
     assert resp.status_code == 303
@@ -63,8 +56,6 @@ async def test_settings_post_writes_env_and_updates_singleton(client, tmp_path, 
 
     # Live singleton updated immediately.
     assert settings.timezone == "America/Denver"
-    assert settings.slack_sync_time == "02:30"
-    assert settings.slack_sync_day == "mon"
     assert settings.backup_day == "fri"
     assert settings.backup_time == "02:15"
     assert settings.backup_keep == 21
@@ -72,8 +63,6 @@ async def test_settings_post_writes_env_and_updates_singleton(client, tmp_path, 
     # Persisted to .env for the next restart.
     written = env_file.read_text()
     assert "TIMEZONE=America/Denver" in written
-    assert "SLACK_SYNC_TIME=02:30" in written
-    assert "SLACK_SYNC_DAY=mon" in written
     assert "BACKUP_DAY=fri" in written
     assert "BACKUP_TIME=02:15" in written
     assert "BACKUP_KEEP=21" in written

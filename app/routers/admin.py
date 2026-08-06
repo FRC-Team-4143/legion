@@ -525,7 +525,7 @@ async def admin_members_bump_grades(request: Request, db: AsyncSession = Depends
 @router.post("/members/sync-slack")
 async def admin_members_sync_slack(request: Request, db: AsyncSession = Depends(get_db)):
     """Push every active member's roster metadata into their Slack custom profile
-    fields on demand (mirrors the nightly scheduled sync)."""
+    fields on demand. This is the only way the sync runs — no scheduled job."""
     if redirect := _require_auth(request):
         return redirect
     from app.services import slack_profile
@@ -1157,7 +1157,6 @@ async def admin_backup_restore(
 ENV_PATH = ".env"
 _HHMM_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 _DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
-_SLACK_SYNC_DAYS = _DAYS | {"*"}
 
 
 def _write_env(updates: dict[str, str]) -> None:
@@ -1197,12 +1196,9 @@ async def admin_settings_get(request: Request):
         {
             "request": request,
             "timezone": settings.timezone,
-            "slack_sync_time": settings.slack_sync_time,
-            "slack_sync_day": settings.slack_sync_day,
             "backup_time": settings.backup_time,
             "backup_day": settings.backup_day,
             "backup_keep": settings.backup_keep,
-            "updates_enabled": settings.updates_enabled,
             "saved": request.query_params.get("saved"),
             "error": request.query_params.get("error"),
         },
@@ -1213,12 +1209,9 @@ async def admin_settings_get(request: Request):
 async def admin_settings_post(
     request: Request,
     timezone: str = Form(...),
-    slack_sync_time: str = Form(...),
-    slack_sync_day: str = Form(...),
     backup_time: str = Form(...),
     backup_day: str = Form(...),
     backup_keep: int = Form(...),
-    updates_enabled: bool = Form(False),
     db: AsyncSession = Depends(get_db),
 ):
     if redirect := _require_auth(request):
@@ -1237,20 +1230,6 @@ async def admin_settings_post(
         if tz != settings.timezone:
             env_updates["TIMEZONE"] = tz
             settings.timezone = tz
-
-    sst = slack_sync_time.strip()
-    if not _HHMM_RE.match(sst):
-        errors.append("Slack sync time must be in HH:MM format.")
-    elif sst != settings.slack_sync_time:
-        env_updates["SLACK_SYNC_TIME"] = sst
-        settings.slack_sync_time = sst
-
-    ssd = slack_sync_day.strip().lower()
-    if ssd not in _SLACK_SYNC_DAYS:
-        errors.append("Slack sync day must be one of mon–sun, or * for every day.")
-    elif ssd != settings.slack_sync_day:
-        env_updates["SLACK_SYNC_DAY"] = ssd
-        settings.slack_sync_day = ssd
 
     bt = backup_time.strip()
     if not _HHMM_RE.match(bt):
@@ -1272,10 +1251,6 @@ async def admin_settings_post(
         env_updates["BACKUP_KEEP"] = str(backup_keep)
         settings.backup_keep = backup_keep
 
-    if updates_enabled != settings.updates_enabled:
-        env_updates["UPDATES_ENABLED"] = "true" if updates_enabled else "false"
-        settings.updates_enabled = updates_enabled
-
     if env_updates:
         _write_env(env_updates)
         from app.services.scheduler import reschedule_all
@@ -1284,9 +1259,7 @@ async def admin_settings_post(
     await audit.record(
         db, request, "settings.update",
         f"Updated settings (timezone={settings.timezone}; "
-        f"slack_sync={settings.slack_sync_day} {settings.slack_sync_time}; "
-        f"backup={settings.backup_day} {settings.backup_time} keep={settings.backup_keep}; "
-        f"updates_enabled={settings.updates_enabled})",
+        f"backup={settings.backup_day} {settings.backup_time} keep={settings.backup_keep})",
         entity_type="settings",
     )
     await db.commit()
