@@ -53,7 +53,7 @@ app/
     slack_auth.py    # Outbound SSO challenge DM (Approve/Deny) + message update/delete
     throttle.py      # SSO login rate limit / exponential backoff
     backup.py        # SQLite snapshot backup + staged restore (VACUUM INTO)
-    scheduler.py     # APScheduler: nightly backup, Slack profile sync, SSO DM cleanup sweep
+    scheduler.py     # APScheduler: nightly backup, SSO DM cleanup sweep
     audit.py         # Append-only mutation log
   templates/admin/   # Jinja templates (extend admin/base.html; dark theme)
   templates/sso/     # Standalone SSO pages (username entry, "check Slack" polling)
@@ -204,10 +204,10 @@ model and picked up by `create_all()`.
 ### Slack profile sync (`services/slack_profile.py`)
 One-way push of member metadata into Slack **custom profile fields** (Team, School Year,
 Focus Group, Parent/Guardian 1 & 2 — guardians for students only). Mirrors the siblings'
-cached `AsyncWebClient` + swallow-and-log pattern. Driven by a nightly APScheduler job
-(`job_sync_slack_profiles`) and a manual `/admin/members/sync-slack` button. Gated on
-`slack_bot_token` + `updates_enabled`. Field IDs are constants in the service. Requires
-an **admin user token** (`xoxp-…`) — a bot token can only edit its own profile.
+cached `AsyncWebClient` + swallow-and-log pattern. Manual-only — triggered solely by the
+`/admin/members/sync-slack` button, no scheduled job. Gated on `slack_bot_token`. Field
+IDs are constants in the service. Requires an **admin user token** (`xoxp-…`) — a bot
+token can only edit its own profile.
 
 ## UI Conventions
 Single dark theme shared with Tempus/Munus (`#0a0a0a` bg, `#111111` panels, accent red
