@@ -26,34 +26,45 @@
       </div>
     </div>
   </div>
-  <div class="col-sm-6 col-lg-3">
-    <div class="card">
-      <div class="card-body">
-        <div class="fs-2 fw-bold">{{ stats.teams }}</div>
-        <div class="small text-muted">Teams</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-sm-6 col-lg-3">
-    <div class="card">
-      <div class="card-body">
-        <div class="fs-2 fw-bold">{{ stats.subteams }}</div>
-        <div class="small text-muted">Subteams</div>
-      </div>
-    </div>
-  </div>
 </div>
 
-<div class="card" style="max-width: 640px;">
-  <div class="card-header"><i class="bi bi-plug me-1"></i> API Status</div>
+<div class="card mb-4" style="max-width: 640px;">
+  <div class="card-header"><i class="bi bi-heart-pulse me-1"></i> System Status</div>
   <div class="card-body">
-    {% if api_enabled %}
-    <p class="mb-1"><span class="badge bg-success">Enabled</span> The read API is serving the roster to Tempus &amp; Munus.</p>
-    <a href="/admin/api" class="small">View API access details →</a>
-    {% else %}
-    <p class="mb-1"><span class="badge bg-warning text-dark">Disabled</span> No API key is configured, so the API returns 503.</p>
-    <p class="text-muted small mb-0">Set <code>LEGION_API_KEY</code> in <code>.env</code> to enable roster syncing.</p>
-    {% endif %}
+    <table class="table table-sm mb-0 align-middle">
+      <tbody>
+        <tr>
+          <td style="width: 1%; white-space: nowrap;"><span class="badge bg-success">Online</span></td>
+          <td>Legion <span class="text-muted small">(this app)</span></td>
+          <td class="text-muted small">
+            {% if api_enabled %}Read API enabled{% else %}Read API disabled{% endif %} —
+            <a href="/admin/api">details</a>
+          </td>
+        </tr>
+        {% for app in sibling_status %}
+        <tr>
+          <td style="white-space: nowrap;">
+            {% if app.status == 'ok' %}
+            <span class="badge bg-success">Online</span>
+            {% elif app.status == 'not_configured' %}
+            <span class="badge bg-secondary">Not configured</span>
+            {% else %}
+            <span class="badge bg-danger">Unreachable</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if app.public_url %}<a href="{{ app.public_url }}" target="_blank">{{ app.name }}</a>{% else %}{{ app.name }}{% endif %}
+          </td>
+          <td class="text-muted small">
+            {% if app.status == 'ok' %}Responded in {{ app.latency_ms }}ms
+            {% elif app.status == 'not_configured' %}No public URL set for this deployment
+            {% else %}{{ app.detail }}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </div>
 {% endblock %}

@@ -1,10 +1,12 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from contextlib import asynccontextmanager
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import init_db
+from app.database import get_db, init_db
 from app.routers import admin, api, slack, slack_dispatch, sso
 from app.services.home import commands_for, tiles_for
 from app.services.scheduler import create_scheduler
@@ -32,6 +34,17 @@ app.include_router(slack.router)
 app.include_router(slack_dispatch.router)
 
 templates = Jinja2Templates(directory="app/templates")
+
+
+@app.get("/health")
+async def health(db: AsyncSession = Depends(get_db)):
+    """Unauthenticated liveness + DB check — polled by the admin dashboard's System
+    Status panel (services/health.py) and available for external uptime monitoring."""
+    try:
+        await db.execute(text("SELECT 1"))
+    except Exception:
+        return JSONResponse({"status": "error", "app": "legion"}, status_code=503)
+    return {"status": "ok", "app": "legion"}
 
 
 @app.get("/")

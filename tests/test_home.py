@@ -158,7 +158,7 @@ def test_tiles_grouped_by_kind():
 def test_app_commands_content():
     """Guards the actual command/description text, not just the wiring."""
     tempus_slugs = [cmd for cmd, _ in _APP_COMMANDS["Tempus"]]
-    assert tempus_slugs == ["/hours", "/shop", "/edit", "/qr"]
+    assert tempus_slugs == ["/hours", "/shop", "/edit", "/gtfo", "/qr"]
     assert _APP_COMMANDS["Munus"] == [("/vhours", "Check your volunteer hours")]
     assert "Legion" not in _APP_COMMANDS
 

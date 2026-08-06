@@ -1,0 +1,92 @@
+{% extends "admin/base.html" %}
+{% set active_page = "settings" %}
+{% block title %}Settings — Legion Admin{% endblock %}
+
+{% block content %}
+<h2 class="mb-3">Settings</h2>
+
+{% if saved %}
+<div class="alert alert-success alert-dismissible fade show py-2" role="alert">
+  <i class="bi bi-check-circle me-1"></i> Settings saved. Changes take effect immediately.
+  <button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if error %}
+<div class="alert alert-danger alert-dismissible fade show py-2" role="alert">
+  <i class="bi bi-exclamation-triangle me-1"></i> {{ error }}
+  <button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<div class="card" style="max-width: 560px;">
+  <div class="card-header"><i class="bi bi-gear me-1"></i> General</div>
+  <div class="card-body">
+    <p class="text-muted small">
+      These write back to <code>.env</code> and take effect immediately — no restart.
+      API keys, secrets, and SSO security tuning are intentionally not editable here.
+    </p>
+    {% set days = [("*","Every day"),("mon","Monday"),("tue","Tuesday"),("wed","Wednesday"),("thu","Thursday"),("fri","Friday"),("sat","Saturday"),("sun","Sunday")] %}
+    <form method="post" action="/admin/settings">
+      <div class="mb-3">
+        <label class="form-label">Timezone</label>
+        <input type="text" name="timezone" class="form-control" list="tz-list" value="{{ timezone }}" required>
+        <datalist id="tz-list">
+          <option value="America/New_York">
+          <option value="America/Chicago">
+          <option value="America/Denver">
+          <option value="America/Los_Angeles">
+          <option value="America/Phoenix">
+          <option value="America/Anchorage">
+          <option value="Pacific/Honolulu">
+          <option value="UTC">
+        </datalist>
+        <div class="form-text">IANA timezone name used for scheduling and display.</div>
+      </div>
+
+      <h6 class="mt-4 mb-2">Slack Profile Sync</h6>
+      <p class="text-muted small">Nightly push of team / school year / subteam / guardian data into Slack profiles.</p>
+      <div class="mb-3">
+        <label class="form-label">Sync day</label>
+        <select name="slack_sync_day" class="form-select">
+          {% for value, label in days %}
+          <option value="{{ value }}" {% if slack_sync_day == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Sync time</label>
+        <input type="time" name="slack_sync_time" class="form-control" value="{{ slack_sync_time }}" required>
+      </div>
+
+      <h6 class="mt-4 mb-2">Backup</h6>
+      <div class="mb-3">
+        <label class="form-label">Backup day</label>
+        <select name="backup_day" class="form-select">
+          {% for value, label in days if value != "*" %}
+          <option value="{{ value }}" {% if backup_day == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Backup time</label>
+        <input type="time" name="backup_time" class="form-control" value="{{ backup_time }}" required>
+      </div>
+      <div class="mb-3 row align-items-center">
+        <label class="col-sm-7 col-form-label">Backups to keep</label>
+        <div class="col-sm-5">
+          <input type="number" min="1" step="1" name="backup_keep" class="form-control" value="{{ backup_keep }}" required>
+        </div>
+      </div>
+
+      <h6 class="mt-4 mb-2">Automation</h6>
+      <div class="mb-3 form-check">
+        <input type="checkbox" class="form-check-input" name="updates_enabled" id="updates_enabled" value="true" {% if updates_enabled %}checked{% endif %}>
+        <label class="form-check-label" for="updates_enabled">Enable automated updates</label>
+        <div class="form-text">Master switch for the Slack profile sync and nightly backup jobs.</div>
+      </div>
+
+      <button type="submit" class="btn btn-primary">Save</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

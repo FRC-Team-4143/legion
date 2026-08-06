@@ -7,6 +7,7 @@ import csv
 import hmac
 import io
 import logging
+import re
 from datetime import datetime
 from typing import Optional
 from urllib.parse import quote
@@ -105,6 +106,7 @@ _SECTION_LABELS = [
     ("/admin/api", "API Access"),
     ("/admin/audit", "Audit Log"),
     ("/admin/backup", "Backup"),
+    ("/admin/settings", "Settings"),
     ("/admin/members", "Members"),
     ("/admin", "Dashboard"),
 ]
@@ -219,24 +221,44 @@ async def admin_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     stats = {
         "students": await _count(Member.is_active.is_(True), Member.role == MemberRole.student),
         "mentors": await _count(Member.is_active.is_(True), Member.role == MemberRole.mentor),
-        "teams": await db.scalar(select(func.count()).select_from(Team)) or 0,
-        "subteams": await db.scalar(
-            select(func.count()).select_from(Subteam).where(Subteam.is_active.is_(True))
-        ) or 0,
     }
+
+    from app.services.health import check_sibling_apps
+    sibling_status = await check_sibling_apps()
+
     return templates.TemplateResponse(
         "admin/dashboard.html",
-        {"request": request, "stats": stats, "api_enabled": bool(settings.tempus_api_key or settings.munus_api_key)},
+        {
+            "request": request,
+            "stats": stats,
+            "api_enabled": bool(settings.tempus_api_key or settings.munus_api_key),
+            "sibling_status": sibling_status,
+        },
     )
 
 
 # ── Members ────────────────────────────────────────────────────────────────────
+
+_MEMBER_SORT_KEYS = ("name", "grade", "team", "subteam")
+
+
+def _member_sort_key(sort: str):
+    if sort == "grade":
+        return lambda m: (GRADE_ORDER.index(m.grade) if m.grade in GRADE_ORDER else -1)
+    if sort == "team":
+        return lambda m: (m.team.number if m.team else -1)
+    if sort == "subteam":
+        return lambda m: (m.subteam.label.lower() if m.subteam else "")
+    return lambda m: m.name.lower()
+
 
 @router.get("/members", response_class=HTMLResponse)
 async def admin_members_list(
     request: Request,
     role: str = "",
     show_archived: int = 0,
+    sort: str = "name",
+    dir: str = "asc",
     db: AsyncSession = Depends(get_db),
 ):
     if redirect := _require_staff(request):
@@ -254,6 +276,10 @@ async def admin_members_list(
         q = q.where(Member.role == MemberRole(role_filter))
     members = (await db.execute(q)).scalars().all()
 
+    sort = sort if sort in _MEMBER_SORT_KEYS else "name"
+    sort_dir = dir if dir in ("asc", "desc") else "asc"
+    members = sorted(members, key=_member_sort_key(sort), reverse=(sort_dir == "desc"))
+
     return templates.TemplateResponse(
         "admin/members.html",
         {
@@ -265,6 +291,8 @@ async def admin_members_list(
             "grades": list(StudentGrade),
             "role_filter": role_filter,
             "show_archived": bool(show_archived),
+            "sort": sort,
+            "dir": sort_dir,
             "error": request.query_params.get("error"),
             "message": request.query_params.get("message"),
         },
@@ -1113,3 +1141,156 @@ async def admin_backup_restore(
         await db.commit()
     result = "success" if ok else "error"
     return RedirectResponse(f"/admin/backup?result={result}&message={quote(message)}", status_code=303)
+
+
+# ── Settings ───────────────────────────────────────────────────────────────────
+#
+# Only non-secret, low-blast-radius operational knobs are editable here — the same
+# scope Tempus/Munus expose on their own Settings pages. Deliberately excluded:
+# every secret/API key/token (admin_password, session_secret, sso_secret,
+# tempus_api_key, munus_api_key, slack_bot_token, slack_auth_bot_token,
+# slack_signing_secret), SSO security tuning (rate limits/backoff/TTLs, cookie
+# domain, allowed return hosts — misconfiguring these can silently weaken or break
+# login fleet-wide), and inter-app networking (interact/public URLs, database_url —
+# deploy-time topology, not day-to-day admin tuning).
+
+ENV_PATH = ".env"
+_HHMM_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+_DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+_SLACK_SYNC_DAYS = _DAYS | {"*"}
+
+
+def _write_env(updates: dict[str, str]) -> None:
+    """Upsert KEY=value pairs into .env, preserving other lines."""
+    # Values become raw KEY=VALUE lines below — strip any embedded CR/LF so a
+    # submitted value can never inject an extra line (e.g. overwriting SSO_SECRET).
+    updates = {k: v.replace("\r", "").replace("\n", "") for k, v in updates.items()}
+    try:
+        with open(ENV_PATH, "r") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        lines = []
+
+    written: set[str] = set()
+    new_lines = []
+    for line in lines:
+        key = line.split("=", 1)[0].strip().upper()
+        if key in updates:
+            new_lines.append(f"{key}={updates[key]}\n")
+            written.add(key)
+        else:
+            new_lines.append(line)
+    for key, val in updates.items():
+        if key not in written:
+            new_lines.append(f"{key}={val}\n")
+
+    with open(ENV_PATH, "w") as f:
+        f.writelines(new_lines)
+
+
+@router.get("/settings", response_class=HTMLResponse)
+async def admin_settings_get(request: Request):
+    if redirect := _require_auth(request):
+        return redirect
+    return templates.TemplateResponse(
+        "admin/settings.html",
+        {
+            "request": request,
+            "timezone": settings.timezone,
+            "slack_sync_time": settings.slack_sync_time,
+            "slack_sync_day": settings.slack_sync_day,
+            "backup_time": settings.backup_time,
+            "backup_day": settings.backup_day,
+            "backup_keep": settings.backup_keep,
+            "updates_enabled": settings.updates_enabled,
+            "saved": request.query_params.get("saved"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.post("/settings")
+async def admin_settings_post(
+    request: Request,
+    timezone: str = Form(...),
+    slack_sync_time: str = Form(...),
+    slack_sync_day: str = Form(...),
+    backup_time: str = Form(...),
+    backup_day: str = Form(...),
+    backup_keep: int = Form(...),
+    updates_enabled: bool = Form(False),
+    db: AsyncSession = Depends(get_db),
+):
+    if redirect := _require_auth(request):
+        return redirect
+
+    errors: list[str] = []
+    env_updates: dict[str, str] = {}
+
+    tz = timezone.strip()
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+    try:
+        ZoneInfo(tz)
+    except (ZoneInfoNotFoundError, ValueError):
+        errors.append(f"Unknown timezone: {tz!r}.")
+    else:
+        if tz != settings.timezone:
+            env_updates["TIMEZONE"] = tz
+            settings.timezone = tz
+
+    sst = slack_sync_time.strip()
+    if not _HHMM_RE.match(sst):
+        errors.append("Slack sync time must be in HH:MM format.")
+    elif sst != settings.slack_sync_time:
+        env_updates["SLACK_SYNC_TIME"] = sst
+        settings.slack_sync_time = sst
+
+    ssd = slack_sync_day.strip().lower()
+    if ssd not in _SLACK_SYNC_DAYS:
+        errors.append("Slack sync day must be one of mon–sun, or * for every day.")
+    elif ssd != settings.slack_sync_day:
+        env_updates["SLACK_SYNC_DAY"] = ssd
+        settings.slack_sync_day = ssd
+
+    bt = backup_time.strip()
+    if not _HHMM_RE.match(bt):
+        errors.append("Backup time must be in HH:MM format.")
+    elif bt != settings.backup_time:
+        env_updates["BACKUP_TIME"] = bt
+        settings.backup_time = bt
+
+    bd = backup_day.strip().lower()
+    if bd not in _DAYS:
+        errors.append("Backup day must be one of mon–sun.")
+    elif bd != settings.backup_day:
+        env_updates["BACKUP_DAY"] = bd
+        settings.backup_day = bd
+
+    if backup_keep < 1:
+        errors.append("Backups to keep must be at least 1.")
+    elif backup_keep != settings.backup_keep:
+        env_updates["BACKUP_KEEP"] = str(backup_keep)
+        settings.backup_keep = backup_keep
+
+    if updates_enabled != settings.updates_enabled:
+        env_updates["UPDATES_ENABLED"] = "true" if updates_enabled else "false"
+        settings.updates_enabled = updates_enabled
+
+    if env_updates:
+        _write_env(env_updates)
+        from app.services.scheduler import reschedule_all
+        reschedule_all(getattr(request.app.state, "scheduler", None))
+
+    await audit.record(
+        db, request, "settings.update",
+        f"Updated settings (timezone={settings.timezone}; "
+        f"slack_sync={settings.slack_sync_day} {settings.slack_sync_time}; "
+        f"backup={settings.backup_day} {settings.backup_time} keep={settings.backup_keep}; "
+        f"updates_enabled={settings.updates_enabled})",
+        entity_type="settings",
+    )
+    await db.commit()
+
+    if errors:
+        return RedirectResponse(f"/admin/settings?error={quote('; '.join(errors))}", status_code=303)
+    return RedirectResponse("/admin/settings?saved=1", status_code=303)

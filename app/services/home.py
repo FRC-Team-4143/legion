@@ -28,6 +28,7 @@ _APP_COMMANDS: dict[str, list[tuple[str, str]]] = {
         ("/hours", "Check your weekly hours"),
         ("/shop", "See who's currently signed in"),
         ("/edit", "Edit a student's session (mentors)"),
+        ("/gtfo", "Signs out all students (mentors)"),
         ("/qr", "Get your kiosk QR badge"),
     ],
     "Munus": [

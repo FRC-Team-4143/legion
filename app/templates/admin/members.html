@@ -2,14 +2,26 @@
 {% set active_page = "members" %}
 {% block title %}Members — Legion Admin{% endblock %}
 
+{% macro sort_th(label, key) %}
+<th>
+  <a href="/admin/members?sort={{ key }}&dir={{ 'desc' if sort == key and dir == 'asc' else 'asc' }}{% if role_filter %}&role={{ role_filter }}{% endif %}{% if show_archived %}&show_archived=1{% endif %}"
+     class="text-decoration-none text-reset d-inline-flex align-items-center gap-1">
+    {{ label }}
+    {% if sort == key %}<i class="bi bi-caret-{{ 'up' if dir == 'asc' else 'down' }}-fill"></i>{% else %}<i class="bi bi-caret-down-fill opacity-25"></i>{% endif %}
+  </a>
+</th>
+{% endmacro %}
+
+{% set sort_qs = ('&sort=' ~ sort if sort and sort != 'name' else '') ~ ('&dir=' ~ dir if dir and dir != 'asc' else '') %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h2 class="mb-0">Members</h2>
   <div class="d-flex gap-2">
     {% if show_archived %}
-    <a href="/admin/members{% if role_filter %}?role={{ role_filter }}{% endif %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-eye-slash me-1"></i> Hide Archived</a>
+    <a href="/admin/members?{% if role_filter %}role={{ role_filter }}{% endif %}{{ sort_qs }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-eye-slash me-1"></i> Hide Archived</a>
     {% else %}
-    <a href="/admin/members?show_archived=1{% if role_filter %}&role={{ role_filter }}{% endif %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-archive me-1"></i> Show Archived</a>
+    <a href="/admin/members?show_archived=1{% if role_filter %}&role={{ role_filter }}{% endif %}{{ sort_qs }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-archive me-1"></i> Show Archived</a>
     {% endif %}
     <form method="post" action="/admin/members/bump-grades" class="d-inline"
           onsubmit="return confirm('Advance every active student one grade? Seniors graduate to Alumni and are archived.')">
@@ -31,16 +43,23 @@
 {% endif %}
 
 <ul class="nav nav-pills mb-3 gap-2">
-  <li class="nav-item"><a class="btn btn-sm {% if not role_filter %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/admin/members{% if show_archived %}?show_archived=1{% endif %}">All</a></li>
-  <li class="nav-item"><a class="btn btn-sm {% if role_filter == 'student' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/admin/members?role=student{% if show_archived %}&show_archived=1{% endif %}">Students</a></li>
-  <li class="nav-item"><a class="btn btn-sm {% if role_filter == 'mentor' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/admin/members?role=mentor{% if show_archived %}&show_archived=1{% endif %}">Mentors</a></li>
+  <li class="nav-item"><a class="btn btn-sm {% if not role_filter %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/admin/members?{% if show_archived %}show_archived=1{% endif %}{{ sort_qs }}">All</a></li>
+  <li class="nav-item"><a class="btn btn-sm {% if role_filter == 'student' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/admin/members?role=student{% if show_archived %}&show_archived=1{% endif %}{{ sort_qs }}">Students</a></li>
+  <li class="nav-item"><a class="btn btn-sm {% if role_filter == 'mentor' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/admin/members?role=mentor{% if show_archived %}&show_archived=1{% endif %}{{ sort_qs }}">Mentors</a></li>
 </ul>
 
 <div class="card">
   <div class="card-body p-0">
     <table class="table table-hover mb-0 align-middle">
       <thead class="table-light">
-        <tr><th>Name</th><th>Role</th><th>Team</th><th>Subteam</th><th>Grade</th><th>Slack UID</th><th>Username</th><th>Member Code</th><th></th></tr>
+        <tr>
+          {{ sort_th('Name', 'name') }}
+          <th>Role</th>
+          {{ sort_th('Team', 'team') }}
+          {{ sort_th('Subteam', 'subteam') }}
+          {{ sort_th('Grade', 'grade') }}
+          <th>Slack UID</th><th>Username</th><th>Member Code</th><th></th>
+        </tr>
       </thead>
       <tbody>
         {% for m in members %}
