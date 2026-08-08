@@ -32,8 +32,9 @@
         <input type="text" name="username" class="form-control" placeholder="last.first" autofocus required autocomplete="username">
       </div>
       <div class="mb-3 form-check">
-        <input type="checkbox" name="remember_device" value="true" class="form-check-input" id="remember-device">
-        <label class="form-check-label small" for="remember-device">Remember this device for 30 days</label>
+        <input type="checkbox" name="remember_browser" value="true" class="form-check-input" id="remember-browser">
+        <label class="form-check-label small" for="remember-browser">Remember this browser for 30 days</label>
+        <div class="text-muted" style="font-size: 0.75rem;">Only recommended for personal devices</div>
       </div>
       <input type="hidden" name="app" value="{{ app }}">
       <input type="hidden" name="return_to" value="{{ return_to }}">

@@ -94,7 +94,7 @@ async def sso_authorize_get(
     if sso_identity(request):
         return RedirectResponse(_append_state(target, state), status_code=303)
 
-    # No live mw_sso, but this browser is a remembered device: silently re-mint a fresh
+    # No live mw_sso, but this is a remembered browser: silently re-mint a fresh
     # mw_sso — no Slack tap — and rotate the remember cookie. This is the whole feature;
     # everything else here is just the fallback path when it doesn't apply.
     if settings.sso_remember_enabled:
@@ -122,7 +122,7 @@ async def sso_authorize_post(
     app: str = Form(""),
     return_to: str = Form("/"),
     state: str = Form(""),
-    remember_device: bool = Form(False),
+    remember_browser: bool = Form(False),
     db: AsyncSession = Depends(get_db),
 ):
     target = allowed_return_to(return_to) or "/"
@@ -165,7 +165,7 @@ async def sso_authorize_post(
         device_id=device_id,
         ip=_client_ip(request),
         status=AuthStatus.pending,
-        remember=remember_device,
+        remember=remember_browser,
         expires_at=datetime.utcnow() + timedelta(seconds=settings.sso_challenge_ttl),
     )
     db.add(auth_request)
@@ -294,12 +294,12 @@ async def sso_complete(nonce: str, request: Request, db: AsyncSession = Depends(
     target = auth_request.return_to or "/"
     dest = _append_state(target, auth_request.state or "")
     member = auth_request.member
-    # Only present when the login form's "remember this device" box was checked
+    # Only present when the login form's "remember this browser" box was checked
     # (services/remember.py stages the row; doesn't commit — same transaction below).
     remember_value = (
         await remember.issue(
             db, member,
-            device_id=auth_request.device_id,
+            browser_key=auth_request.device_id,
             user_agent=request.headers.get("user-agent"),
         )
         if auth_request.remember else None
@@ -318,7 +318,7 @@ async def sso_logout(request: Request, return_to: str = "/", db: AsyncSession = 
     """Single logout: clears the shared `mw_sso` cookie. Also clears Legion's own
     break-glass `admin_session` cookie (irrelevant to sibling apps, which don't have
     one) so this is a complete sign-out no matter which mechanism authenticated.
-    Revokes this device's remember-device grant too — otherwise it would silently
+    Revokes this browser's remember-browser grant too — otherwise it would silently
     re-mint mw_sso the next time /sso/authorize is hit, undoing the logout."""
     target = allowed_return_to(return_to) or "/"
     await remember.revoke(db, request.cookies.get(REMEMBER_COOKIE))

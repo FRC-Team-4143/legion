@@ -42,7 +42,7 @@ async def init_db() -> None:
         await conn.run_sync(_migration_move_is_admin_to_group)
         # Drop the retired `is_lead` flag — no replacement, it's simply gone.
         await conn.run_sync(_migration_drop_is_lead)
-        # Add the "remember this device" opt-in column to an existing auth_requests table.
+        # Add the "remember this browser" opt-in column to an existing auth_requests table.
         await conn.run_sync(_migration_add_authrequest_remember)
 
     await _seed_teams()
@@ -120,9 +120,9 @@ def _migration_drop_is_lead(conn) -> None:
 
 
 def _migration_add_authrequest_remember(conn) -> None:
-    """Add the "remember this device" opt-in column to an existing `auth_requests`
+    """Add the "remember this browser" opt-in column to an existing `auth_requests`
     table. No-op on a freshly created schema, which already has it. The
-    `remembered_devices` table itself is brand-new and needs no migration —
+    `remembered_browsers` table itself is brand-new and needs no migration —
     create_all() makes it automatically."""
     from sqlalchemy import inspect, text
 

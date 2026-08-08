@@ -2,7 +2,7 @@
 APScheduler jobs: a rotating nightly SQLite backup snapshot (mirroring the sibling
 apps' backup schedule), a nightly Slack custom-profile sync, a frequent sweep that
 deletes aged SSO Approve/Deny DMs + their AuthRequest rows, and a daily sweep that
-deletes expired "remember this device" grants.
+deletes expired "remember this browser" grants.
 """
 import logging
 
@@ -41,8 +41,8 @@ async def job_purge_challenge_dms() -> None:
         log.exception("SSO challenge DM purge failed")
 
 
-async def job_purge_expired_remembered_devices() -> None:
-    """Delete "remember this device" grants past their expiry, so remembered_devices
+async def job_purge_expired_remembered_browsers() -> None:
+    """Delete "remember this browser" grants past their expiry, so remembered_browsers
     doesn't grow without bound. Purely housekeeping — an expired row is already inert
     (services/remember.verify_and_rotate rejects it on its own)."""
     try:
@@ -51,9 +51,9 @@ async def job_purge_expired_remembered_devices() -> None:
         async with AsyncSessionLocal() as db:
             purged = await remember.purge_expired(db)
         if purged:
-            log.info("Purged %d expired remembered device(s)", purged)
+            log.info("Purged %d expired remembered browser(s)", purged)
     except Exception:  # never let a purge failure crash the scheduler
-        log.exception("Remembered-device purge failed")
+        log.exception("Remembered-browser purge failed")
 
 
 def register_jobs(scheduler: AsyncIOScheduler) -> None:
@@ -79,12 +79,12 @@ def register_jobs(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
     )
 
-    # Expired remember-device grants are inert but otherwise pile up forever; a daily
+    # Expired remember-browser grants are inert but otherwise pile up forever; a daily
     # sweep is plenty given the shortest possible TTL is measured in days, not minutes.
     scheduler.add_job(
-        job_purge_expired_remembered_devices,
+        job_purge_expired_remembered_browsers,
         IntervalTrigger(hours=24),
-        id="purge_expired_remembered_devices",
+        id="purge_expired_remembered_browsers",
         replace_existing=True,
     )
 

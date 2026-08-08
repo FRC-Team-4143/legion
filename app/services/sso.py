@@ -20,7 +20,7 @@ from app.models import Member
 SSO_COOKIE = "mw_sso"
 DEVICE_COOKIE = "mw_device"
 DEVICE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year — a stable per-browser throttle key
-REMEMBER_COOKIE = "mw_remember"  # opt-in "remember this device" grant — see services/remember.py
+REMEMBER_COOKIE = "mw_remember"  # opt-in "remember this browser" grant — see services/remember.py
 
 _sso_signer = URLSafeTimedSerializer(settings.sso_secret, salt="mw-sso")
 
@@ -82,7 +82,7 @@ def set_device_cookie(response: Response, device_id: str) -> None:
     )
 
 
-# ── Remember-device cookie (Legion-local only — never sent to sibling apps) ─────────
+# ── Remember-browser cookie (Legion-local only — never sent to sibling apps) ────────
 #
 # Plumbing only: the cookie's value is an opaque "selector.validator" string minted and
 # verified by services/remember.py, which owns the actual security logic (hashing,

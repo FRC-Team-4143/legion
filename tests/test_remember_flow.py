@@ -1,26 +1,26 @@
-"""Router-level "remember this device" behavior: the login form's opt-in checkbox,
+"""Router-level "remember this browser" behavior: the login form's opt-in checkbox,
 the silent mw_sso re-mint on /sso/authorize, and revocation on /sso/logout + the
-admin "sign out all devices" action."""
+admin "sign out all browsers" action."""
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.models import AuthRequest, AuthStatus, Member, RememberedDevice
+from app.models import AuthRequest, AuthStatus, Member, RememberedBrowser
 from app.services import remember
 from app.services.sso import make_sso_token
 
 
-async def _approve_and_complete(client, db, username: str, remember_device: bool):
+async def _approve_and_complete(client, db, username: str, remember_browser: bool):
     """Drive one full sign-in through the login form -> approve -> /sso/complete,
     mirroring test_sso_flow.py's pattern of writing AuthStatus.approved directly
     rather than going through the real Slack round-trip (slack_auth_bot_token is
     blank in tests, so send_auth_challenge no-ops)."""
     data = {"username": username, "return_to": "/dash"}
-    if remember_device:
+    if remember_browser:
         # A real browser omits an unchecked checkbox from the form entirely, not send
         # it as an empty string — mirror that here.
-        data["remember_device"] = "true"
+        data["remember_browser"] = "true"
     await client.post("/sso/authorize", data=data)
     auth_request = (await db.execute(select(AuthRequest))).scalars().first()
     auth_request.status = AuthStatus.approved
@@ -28,23 +28,23 @@ async def _approve_and_complete(client, db, username: str, remember_device: bool
     return await client.get(f"/sso/complete/{auth_request.nonce}", follow_redirects=False)
 
 
-async def test_checking_remember_issues_a_device_and_cookie(client, db, make_member):
+async def test_checking_remember_issues_a_browser_and_cookie(client, db, make_member):
     await make_member(name="Grace Hopper", username="hopp.grac")
-    resp = await _approve_and_complete(client, db, "hopp.grac", remember_device=True)
+    resp = await _approve_and_complete(client, db, "hopp.grac", remember_browser=True)
 
     assert resp.status_code == 303
     assert "mw_remember" in resp.cookies
-    row = (await db.execute(select(RememberedDevice))).scalars().first()
+    row = (await db.execute(select(RememberedBrowser))).scalars().first()
     assert row is not None
 
 
-async def test_unchecked_remember_issues_no_device_or_cookie(client, db, make_member):
+async def test_unchecked_remember_issues_no_browser_or_cookie(client, db, make_member):
     await make_member(name="Ada Lovelace", username="love.ada")
-    resp = await _approve_and_complete(client, db, "love.ada", remember_device=False)
+    resp = await _approve_and_complete(client, db, "love.ada", remember_browser=False)
 
     assert resp.status_code == 303
     assert "mw_remember" not in resp.cookies
-    assert (await db.execute(select(RememberedDevice))).scalars().first() is None
+    assert (await db.execute(select(RememberedBrowser))).scalars().first() is None
 
 
 async def test_authorize_get_silently_remints_session_from_remember_cookie(client, db, make_member):
@@ -107,7 +107,7 @@ async def test_authorize_get_ignores_remember_cookie_when_disabled(client, db, m
     assert "mw_sso" not in resp.cookies
 
 
-async def test_logout_revokes_the_remembered_device(client, db, make_member):
+async def test_logout_revokes_the_remembered_browser(client, db, make_member):
     member = await make_member(name="Dorothy Vaughan")
     loaded = (
         await db.execute(
@@ -127,7 +127,7 @@ async def test_logout_revokes_the_remembered_device(client, db, make_member):
     assert await remember.verify_and_rotate(db, remember_value) is None
 
 
-async def test_admin_sign_out_devices_revokes_all_and_requires_staff(client, db, make_member):
+async def test_admin_sign_out_browsers_revokes_all_and_requires_staff(client, db, make_member):
     manager = await make_member(name="Manager Mel", groups=["legion-manager"])
     manager_loaded = (
         await db.execute(
@@ -151,14 +151,14 @@ async def test_admin_sign_out_devices_revokes_all_and_requires_staff(client, db,
     await db.commit()
 
     # No session at all -> redirected to sign in, nothing revoked.
-    anon_resp = await client.post(f"/admin/members/{target.id}/sign-out-devices", follow_redirects=False)
+    anon_resp = await client.post(f"/admin/members/{target.id}/sign-out-browsers", follow_redirects=False)
     assert anon_resp.status_code == 303
-    assert len((await db.execute(select(RememberedDevice))).scalars().all()) == 2
+    assert len((await db.execute(select(RememberedBrowser))).scalars().all()) == 2
 
     client.cookies.set("mw_sso", make_sso_token(manager_loaded))
-    resp = await client.post(f"/admin/members/{target.id}/sign-out-devices", follow_redirects=False)
+    resp = await client.post(f"/admin/members/{target.id}/sign-out-browsers", follow_redirects=False)
     assert resp.status_code == 303
 
-    assert (await db.execute(select(RememberedDevice))).scalars().first() is None
+    assert (await db.execute(select(RememberedBrowser))).scalars().first() is None
     assert await remember.verify_and_rotate(db, value_a) is None
     assert await remember.verify_and_rotate(db, value_b) is None
