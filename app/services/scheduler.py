@@ -1,8 +1,7 @@
 """
 APScheduler jobs: a rotating nightly SQLite backup snapshot (mirroring the sibling
-apps' backup schedule), a nightly Slack custom-profile sync, a frequent sweep that
-deletes aged SSO Approve/Deny DMs + their AuthRequest rows, and a daily sweep that
-deletes expired "remember this browser" grants.
+apps' backup schedule), a nightly Slack custom-profile sync, and a frequent sweep that
+deletes aged SSO Approve/Deny DMs + their AuthRequest rows.
 """
 import logging
 
@@ -41,21 +40,6 @@ async def job_purge_challenge_dms() -> None:
         log.exception("SSO challenge DM purge failed")
 
 
-async def job_purge_expired_remembered_browsers() -> None:
-    """Delete "remember this browser" grants past their expiry, so remembered_browsers
-    doesn't grow without bound. Purely housekeeping — an expired row is already inert
-    (services/remember.verify_and_rotate rejects it on its own)."""
-    try:
-        from app.database import AsyncSessionLocal
-        from app.services import remember
-        async with AsyncSessionLocal() as db:
-            purged = await remember.purge_expired(db)
-        if purged:
-            log.info("Purged %d expired remembered browser(s)", purged)
-    except Exception:  # never let a purge failure crash the scheduler
-        log.exception("Remembered-browser purge failed")
-
-
 def register_jobs(scheduler: AsyncIOScheduler) -> None:
     """(Re)register scheduled jobs from current settings. Safe to call on a running
     scheduler (``replace_existing=True``)."""
@@ -76,15 +60,6 @@ def register_jobs(scheduler: AsyncIOScheduler) -> None:
         job_purge_challenge_dms,
         IntervalTrigger(minutes=settings.sso_dm_cleanup_interval_minutes),
         id="purge_challenge_dms",
-        replace_existing=True,
-    )
-
-    # Expired remember-browser grants are inert but otherwise pile up forever; a daily
-    # sweep is plenty given the shortest possible TTL is measured in days, not minutes.
-    scheduler.add_job(
-        job_purge_expired_remembered_browsers,
-        IntervalTrigger(hours=24),
-        id="purge_expired_remembered_browsers",
         replace_existing=True,
     )
 

@@ -265,10 +265,6 @@ class AuthRequest(Base):
     # (removes the Approve/Deny buttons once the challenge is decided).
     slack_channel_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     slack_message_ts: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    # Set from the login form's "remember this browser" checkbox. Carried through to
-    # `/sso/complete`, which — if true — also issues a RememberedBrowser + `mw_remember`
-    # cookie alongside the normal `mw_sso` one. See services/remember.py.
-    remember: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow
@@ -295,53 +291,6 @@ class AuthThrottle(Base):
     # so repeat spamming is punished harder than a one-off burst.
     lock_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-
-
-class RememberedBrowser(Base):
-    """A "remember this browser" grant — lets a browser silently re-mint `mw_sso` after
-    it expires, without a fresh Slack Approve/Deny tap. Opt-in from the login form
-    (`AuthRequest.remember`), issued by `services/remember.py`.
-
-    Named literally: this is a per-*browser* grant (the `mw_remember` cookie lives in
-    one browser's cookie jar), not a per-physical-device one — a phone with two
-    browsers installed needs to opt in twice, and clearing cookies drops the grant even
-    though the device itself hasn't changed.
-
-    Selector/validator split (same idea as Django's / Laravel's remember-me cookies):
-    `selector` is a stable, indexed lookup key; `validator_hash` is the SHA-256 of a
-    single-use secret that's rotated every time the browser is used to re-mint a
-    session. Only the hash is stored — a stolen database row can't be replayed as a
-    cookie. If a *known* selector shows up with the *wrong* validator, that's a strong
-    signal the plaintext cookie leaked (e.g. a stale value replayed after rotation), so
-    the row is revoked outright rather than just rejected.
-
-    Sliding `expires_at`: refreshed on every successful use, capped at
-    `settings.sso_remember_ttl` (default 30 days) from that use — so an idle browser
-    eventually falls back to a real Slack sign-in, but an active one never has to.
-    """
-    __tablename__ = "remembered_browsers"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    member_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("members.id"), nullable=False, index=True
-    )
-    selector: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
-    validator_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    # The pre-existing throttle's `mw_device` cookie value for this browser (see
-    # services/sso.py's get_device_id) — not itself a credential, just lets an admin
-    # correlate a remembered browser with throttle history. Kept under its throttle
-    # name (`mw_device`) since that's a separate, already-shipped cookie this model
-    # doesn't own or rename.
-    browser_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    # Best-effort label for the admin browser list (e.g. "Safari on iPhone"). Cosmetic
-    # only — never parsed for any security decision.
-    user_agent: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
-
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
-    last_used_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
-    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-
-    member: Mapped["Member"] = relationship("Member")
 
 
 class AuditLog(Base):

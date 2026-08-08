@@ -20,6 +20,20 @@ def _client_ip(request: Optional[Request]) -> Optional[str]:
     return request.client.host
 
 
+def _actor_from_request(request: Optional[Request]) -> str:
+    """The signed-in admin's identity for the actor column: their SSO name (or
+    username). Falls back to "admin" when there's a request but no SSO identity on it
+    (the shared break-glass password login has no per-person identity to report), or
+    "system" when there's no request at all (scheduled jobs)."""
+    if request is None:
+        return "system"
+    from app.services.sso import sso_identity
+    identity = sso_identity(request)
+    if identity is None:
+        return "admin"
+    return identity.get("name") or identity.get("username") or "admin"
+
+
 async def record(
     db: AsyncSession,
     request: Optional[Request],
@@ -29,16 +43,16 @@ async def record(
     entity_type: Optional[str] = None,
     entity_id: Optional[Any] = None,
     detail: Optional[dict] = None,
-    actor: str = "admin",
+    actor: Optional[str] = None,
 ) -> None:
     """Stage an audit row on the session (does not commit).
 
     `action` is a dotted verb like "member.create"; `detail` is an optional dict
-    serialized to JSON.
+    serialized to JSON. `actor` defaults to the SSO identity on the request.
     """
     db.add(AuditLog(
         timestamp=datetime.utcnow(),
-        actor=actor,
+        actor=actor or _actor_from_request(request),
         ip=_client_ip(request),
         action=action,
         entity_type=entity_type,

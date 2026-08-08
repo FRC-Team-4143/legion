@@ -21,15 +21,6 @@
         <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">regenerate</button>
       </form>
     </p>
-    <p class="text-muted small">
-      Remembered browsers: {{ remembered_browser_count }}
-      {% if remembered_browser_count %}
-      <form method="post" action="/admin/members/{{ member.id }}/sign-out-browsers" class="d-inline"
-            onsubmit="return confirm('Sign {{ member.name }} out of all remembered browsers? Each one will need to approve a fresh Slack sign-in prompt next time.');">
-        <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">sign out all</button>
-      </form>
-      {% endif %}
-    </p>
     <form method="post" action="/admin/members/{{ member.id }}/edit">
       <div class="mb-3">
         <label class="form-label">Name</label>

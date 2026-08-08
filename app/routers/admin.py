@@ -24,9 +24,9 @@ from app.config import settings
 from app.database import get_db
 from app.models import (
     AuditLog, GRADE_LABELS, GRADE_ORDER, Group, Member, MemberRole,
-    RememberedBrowser, StudentGrade, Subteam, Team, grade_label, member_user_groups, role_label,
+    StudentGrade, Subteam, Team, grade_label, member_user_groups, role_label,
 )
-from app.services import audit, remember, throttle
+from app.services import audit, throttle
 from app.services.members import generate_member_code
 from app.services.sso import sso_identity
 from app.services.username import assign_unique_username
@@ -351,12 +351,6 @@ async def admin_members_edit_get(member_id: int, request: Request, db: AsyncSess
     member = (await db.execute(select(Member).where(Member.id == member_id))).scalars().first()
     if not member:
         return RedirectResponse("/admin/members", status_code=303)
-    remembered_browser_count = (
-        await db.execute(
-            select(func.count()).select_from(RememberedBrowser)
-            .where(RememberedBrowser.member_id == member.id)
-        )
-    ).scalar_one()
     return templates.TemplateResponse(
         "admin/member_edit.html",
         {
@@ -367,7 +361,6 @@ async def admin_members_edit_get(member_id: int, request: Request, db: AsyncSess
             "roles": list(MemberRole),
             "grades": list(StudentGrade),
             "error": request.query_params.get("error"),
-            "remembered_browser_count": remembered_browser_count,
         },
     )
 
@@ -435,26 +428,6 @@ async def admin_members_regenerate_username(member_id: int, request: Request, db
         await audit.record(
             db, request, "member.regenerate_username",
             f"Regenerated username for {member.name} ({old} -> {member.username})",
-            entity_type="member", entity_id=member.id,
-        )
-        await db.commit()
-    return RedirectResponse(f"/admin/members/{member_id}/edit", status_code=303)
-
-
-@router.post("/members/{member_id}/sign-out-browsers")
-async def admin_members_sign_out_browsers(member_id: int, request: Request, db: AsyncSession = Depends(get_db)):
-    """Revoke every "remember this browser" grant for a member (services/remember.py) —
-    e.g. a lost/stolen phone. Doesn't touch their current mw_sso session (still trusted
-    until it naturally expires); it only stops future silent re-mints, so a browser
-    that's already signed in stays that way until its 12h session lapses on its own."""
-    if redirect := _require_staff(request):
-        return redirect
-    member = (await db.execute(select(Member).where(Member.id == member_id))).scalars().first()
-    if member:
-        await remember.revoke_all_for_member(db, member.id)
-        await audit.record(
-            db, request, "member.sign_out_browsers",
-            f"Signed out all remembered browsers for {member.name}",
             entity_type="member", entity_id=member.id,
         )
         await db.commit()

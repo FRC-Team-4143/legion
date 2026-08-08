@@ -31,10 +31,10 @@ from app.config import settings
 from app.database import get_db
 from app.models import AuthRequest, AuthStatus, Member
 from app.routers.api import require_api_key
-from app.services import remember, slack_auth, throttle
+from app.services import slack_auth, throttle
 from app.services.sso import (
-    REMEMBER_COOKIE, allowed_return_to, clear_remember_cookie, clear_sso_cookie,
-    get_device_id, set_device_cookie, set_remember_cookie, set_sso_cookie, sso_identity,
+    allowed_return_to, clear_sso_cookie, get_device_id, set_device_cookie, set_sso_cookie,
+    sso_identity,
 )
 
 router = APIRouter(prefix="/sso")
@@ -84,27 +84,12 @@ async def _dispatch_challenge(member_id: int, nonce: str, app: str) -> None:
 
 
 @router.get("/authorize", response_class=HTMLResponse)
-async def sso_authorize_get(
-    request: Request, app: str = "", return_to: str = "/", state: str = "",
-    db: AsyncSession = Depends(get_db),
-):
+async def sso_authorize_get(request: Request, app: str = "", return_to: str = "/", state: str = ""):
     target = allowed_return_to(return_to) or "/"
 
     # Already signed in — real SSO, no prompt needed.
     if sso_identity(request):
         return RedirectResponse(_append_state(target, state), status_code=303)
-
-    # No live mw_sso, but this is a remembered browser: silently re-mint a fresh
-    # mw_sso — no Slack tap — and rotate the remember cookie. This is the whole feature;
-    # everything else here is just the fallback path when it doesn't apply.
-    if settings.sso_remember_enabled:
-        verified = await remember.verify_and_rotate(db, request.cookies.get(REMEMBER_COOKIE))
-        if verified is not None:
-            member, new_remember_value = verified
-            response = RedirectResponse(_append_state(target, state), status_code=303)
-            set_sso_cookie(response, member)
-            set_remember_cookie(response, new_remember_value)
-            return response
 
     response = templates.TemplateResponse(
         "sso/login.html",
@@ -122,7 +107,6 @@ async def sso_authorize_post(
     app: str = Form(""),
     return_to: str = Form("/"),
     state: str = Form(""),
-    remember_browser: bool = Form(False),
     db: AsyncSession = Depends(get_db),
 ):
     target = allowed_return_to(return_to) or "/"
@@ -165,7 +149,6 @@ async def sso_authorize_post(
         device_id=device_id,
         ip=_client_ip(request),
         status=AuthStatus.pending,
-        remember=remember_browser,
         expires_at=datetime.utcnow() + timedelta(seconds=settings.sso_challenge_ttl),
     )
     db.add(auth_request)
@@ -294,36 +277,24 @@ async def sso_complete(nonce: str, request: Request, db: AsyncSession = Depends(
     target = auth_request.return_to or "/"
     dest = _append_state(target, auth_request.state or "")
     member = auth_request.member
-    # Only present when the login form's "remember this browser" box was checked
-    # (services/remember.py stages the row; doesn't commit — same transaction below).
-    remember_value = (
-        await remember.issue(
-            db, member,
-            browser_key=auth_request.device_id,
-            user_agent=request.headers.get("user-agent"),
-        )
-        if auth_request.remember else None
-    )
     await db.commit()
 
     response = RedirectResponse(dest, status_code=303)
     set_sso_cookie(response, member)
-    if remember_value:
-        set_remember_cookie(response, remember_value)
     return response
 
 
 @router.get("/logout")
-async def sso_logout(request: Request, return_to: str = "/", db: AsyncSession = Depends(get_db)):
+async def sso_logout(return_to: str = "/"):
     """Single logout: clears the shared `mw_sso` cookie. Also clears Legion's own
     break-glass `admin_session` cookie (irrelevant to sibling apps, which don't have
     one) so this is a complete sign-out no matter which mechanism authenticated.
-    Revokes this browser's remember-browser grant too — otherwise it would silently
-    re-mint mw_sso the next time /sso/authorize is hit, undoing the logout."""
+    Also clears the retired `mw_remember` cookie by name, in case a browser is still
+    carrying one from before "remember this browser" was removed — nothing reads it
+    anymore, this is just hygiene."""
     target = allowed_return_to(return_to) or "/"
-    await remember.revoke(db, request.cookies.get(REMEMBER_COOKIE))
     response = RedirectResponse(target, status_code=303)
     clear_sso_cookie(response)
-    clear_remember_cookie(response)
+    response.delete_cookie("mw_remember", domain=settings.sso_cookie_domain or None)
     response.delete_cookie("admin_session")
     return response

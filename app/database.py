@@ -42,8 +42,9 @@ async def init_db() -> None:
         await conn.run_sync(_migration_move_is_admin_to_group)
         # Drop the retired `is_lead` flag — no replacement, it's simply gone.
         await conn.run_sync(_migration_drop_is_lead)
-        # Add the "remember this browser" opt-in column to an existing auth_requests table.
-        await conn.run_sync(_migration_add_authrequest_remember)
+        # Drop the retired "remember this browser" feature's column + table.
+        await conn.run_sync(_migration_drop_authrequest_remember)
+        await conn.run_sync(_migration_drop_remembered_browsers_table)
 
     await _seed_teams()
     await _seed_subteams()
@@ -119,18 +120,25 @@ def _migration_drop_is_lead(conn) -> None:
         conn.execute(text("ALTER TABLE members DROP COLUMN is_lead"))
 
 
-def _migration_add_authrequest_remember(conn) -> None:
-    """Add the "remember this browser" opt-in column to an existing `auth_requests`
-    table. No-op on a freshly created schema, which already has it. The
-    `remembered_browsers` table itself is brand-new and needs no migration —
-    create_all() makes it automatically."""
+def _migration_drop_authrequest_remember(conn) -> None:
+    """Drop the retired "remember this browser" opt-in column from an existing
+    `auth_requests` table. No-op once it's gone (fresh schemas never had it, since the
+    model no longer declares it). SQLite >=3.35 supports DROP COLUMN."""
     from sqlalchemy import inspect, text
 
     if "auth_requests" not in inspect(conn).get_table_names():
         return
     cols = {c["name"] for c in inspect(conn).get_columns("auth_requests")}
-    if "remember" not in cols:
-        conn.execute(text("ALTER TABLE auth_requests ADD COLUMN remember BOOLEAN NOT NULL DEFAULT 0"))
+    if "remember" in cols:
+        conn.execute(text("ALTER TABLE auth_requests DROP COLUMN remember"))
+
+
+def _migration_drop_remembered_browsers_table(conn) -> None:
+    """Drop the retired `remembered_browsers` table entirely — the "remember this
+    browser" feature is gone, not replaced. No-op if it's already absent."""
+    from sqlalchemy import text
+
+    conn.execute(text("DROP TABLE IF EXISTS remembered_browsers"))
 
 
 async def _seed_teams() -> None:
