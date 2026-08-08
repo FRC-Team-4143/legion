@@ -42,6 +42,8 @@ async def init_db() -> None:
         await conn.run_sync(_migration_move_is_admin_to_group)
         # Drop the retired `is_lead` flag — no replacement, it's simply gone.
         await conn.run_sync(_migration_drop_is_lead)
+        # Add the "remember this device" opt-in column to an existing auth_requests table.
+        await conn.run_sync(_migration_add_authrequest_remember)
 
     await _seed_teams()
     await _seed_subteams()
@@ -115,6 +117,20 @@ def _migration_drop_is_lead(conn) -> None:
     cols = {c["name"] for c in inspect(conn).get_columns("members")}
     if "is_lead" in cols:
         conn.execute(text("ALTER TABLE members DROP COLUMN is_lead"))
+
+
+def _migration_add_authrequest_remember(conn) -> None:
+    """Add the "remember this device" opt-in column to an existing `auth_requests`
+    table. No-op on a freshly created schema, which already has it. The
+    `remembered_devices` table itself is brand-new and needs no migration —
+    create_all() makes it automatically."""
+    from sqlalchemy import inspect, text
+
+    if "auth_requests" not in inspect(conn).get_table_names():
+        return
+    cols = {c["name"] for c in inspect(conn).get_columns("auth_requests")}
+    if "remember" not in cols:
+        conn.execute(text("ALTER TABLE auth_requests ADD COLUMN remember BOOLEAN NOT NULL DEFAULT 0"))
 
 
 async def _seed_teams() -> None:

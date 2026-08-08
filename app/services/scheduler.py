@@ -1,8 +1,8 @@
 """
 APScheduler jobs: a rotating nightly SQLite backup snapshot (mirroring the sibling
-apps' backup schedule) and a frequent sweep that deletes aged SSO Approve/Deny DMs +
-their AuthRequest rows. Slack profile sync is manual-only (admin button), not
-scheduled here — see services/slack_profile.py.
+apps' backup schedule), a nightly Slack custom-profile sync, a frequent sweep that
+deletes aged SSO Approve/Deny DMs + their AuthRequest rows, and a daily sweep that
+deletes expired "remember this device" grants.
 """
 import logging
 
@@ -41,6 +41,21 @@ async def job_purge_challenge_dms() -> None:
         log.exception("SSO challenge DM purge failed")
 
 
+async def job_purge_expired_remembered_devices() -> None:
+    """Delete "remember this device" grants past their expiry, so remembered_devices
+    doesn't grow without bound. Purely housekeeping — an expired row is already inert
+    (services/remember.verify_and_rotate rejects it on its own)."""
+    try:
+        from app.database import AsyncSessionLocal
+        from app.services import remember
+        async with AsyncSessionLocal() as db:
+            purged = await remember.purge_expired(db)
+        if purged:
+            log.info("Purged %d expired remembered device(s)", purged)
+    except Exception:  # never let a purge failure crash the scheduler
+        log.exception("Remembered-device purge failed")
+
+
 def register_jobs(scheduler: AsyncIOScheduler) -> None:
     """(Re)register scheduled jobs from current settings. Safe to call on a running
     scheduler (``replace_existing=True``)."""
@@ -61,6 +76,15 @@ def register_jobs(scheduler: AsyncIOScheduler) -> None:
         job_purge_challenge_dms,
         IntervalTrigger(minutes=settings.sso_dm_cleanup_interval_minutes),
         id="purge_challenge_dms",
+        replace_existing=True,
+    )
+
+    # Expired remember-device grants are inert but otherwise pile up forever; a daily
+    # sweep is plenty given the shortest possible TTL is measured in days, not minutes.
+    scheduler.add_job(
+        job_purge_expired_remembered_devices,
+        IntervalTrigger(hours=24),
+        id="purge_expired_remembered_devices",
         replace_existing=True,
     )
 

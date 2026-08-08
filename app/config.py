@@ -82,6 +82,15 @@ class Settings(BaseSettings):
     # to (open-redirect guard). A bare path ("/admin") is always allowed regardless.
     sso_allowed_return_hosts: str = "localhost,127.0.0.1"
 
+    # "Remember this device" — an opt-in checkbox on the login form lets a browser
+    # silently re-mint `mw_sso` after it expires, skipping the Slack Approve/Deny tap.
+    # See services/remember.py. Sliding window: refreshed on every successful use, so
+    # an active device never has to re-approve but an idle one falls back to Slack
+    # after this many seconds of inactivity. False disables issuing *new* grants
+    # (existing ones simply age out) — a kill switch, not a mass-revoke.
+    sso_remember_enabled: bool = True
+    sso_remember_ttl: int = 60 * 60 * 24 * 30  # 30 days
+
     # Absolute base URL of this Legion instance (used for links, e.g. in Slack DMs).
     base_url: str = "http://localhost:8002"
 
