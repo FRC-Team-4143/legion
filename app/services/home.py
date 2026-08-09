@@ -12,10 +12,12 @@ _APP_ICONS = {
     "Legion": "bi-shield-lock",
     "Tempus": "bi-clock-history",
     "Munus": "bi-heart",
+    "Merces": "bi-wallet2",
 }
 _PERSONAL_ICONS = {
     "Tempus": "bi-stopwatch",
     "Munus": "bi-clipboard-check",
+    "Merces": "bi-cash-coin",
 }
 
 # Each app's registered Slack slash commands, paired with a short description (see each
@@ -33,6 +35,9 @@ _APP_COMMANDS: dict[str, list[tuple[str, str]]] = {
     ],
     "Munus": [
         ("/vhours", "Check your volunteer hours"),
+    ],
+    "Merces": [
+        ("/merces", "Check your MARS Moola balance"),
     ],
 }
 
@@ -90,6 +95,23 @@ def tiles_for(identity: dict) -> list[dict]:
                 "app": "Munus", "tier": "Volunteer Hours",
                 "url": f"{settings.munus_public_url}/me", "icon": _PERSONAL_ICONS["Munus"], "kind": "personal",
             })
+
+    if settings.merces_public_url:
+        if "merces-admin" in groups:
+            tiles.append({
+                "app": "Merces", "tier": "Admin",
+                "url": f"{settings.merces_public_url}/admin", "icon": _APP_ICONS["Merces"], "kind": "staff",
+            })
+        elif "merces-manager" in groups:
+            tiles.append({
+                "app": "Merces", "tier": "Manager",
+                "url": f"{settings.merces_public_url}/admin", "icon": _APP_ICONS["Merces"], "kind": "staff",
+            })
+        # Open to every member — their own balance, store, and orders.
+        tiles.append({
+            "app": "Merces", "tier": "My Balance",
+            "url": f"{settings.merces_public_url}/me", "icon": _PERSONAL_ICONS["Merces"], "kind": "personal",
+        })
 
     return tiles
 
