@@ -15,9 +15,9 @@
 {% set sort_qs = ('&sort=' ~ sort if sort and sort != 'name' else '') ~ ('&dir=' ~ dir if dir and dir != 'asc' else '') %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <h2 class="mb-0">Members</h2>
-  <div class="d-flex gap-2">
+  <div class="d-flex gap-2 flex-wrap">
     {% if show_archived %}
     <a href="/admin/members?{% if role_filter %}role={{ role_filter }}{% endif %}{{ sort_qs }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-eye-slash me-1"></i> Hide Archived</a>
     {% else %}
@@ -50,6 +50,7 @@
 
 <div class="card">
   <div class="card-body p-0">
+    <div class="table-responsive">
     <table class="table table-hover mb-0 align-middle">
       <thead class="table-light">
         <tr>
@@ -95,6 +96,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
 </div>
 

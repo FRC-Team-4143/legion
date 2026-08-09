@@ -19,6 +19,7 @@
     <div class="card">
       <div class="card-header">Members <span class="badge bg-secondary">{{ members|length }}</span></div>
       <div class="card-body p-0">
+        <div class="table-responsive">
         <table class="table table-hover mb-0 align-middle">
           <thead class="table-light"><tr><th>Name</th><th>Role</th><th></th></tr></thead>
           <tbody>
@@ -37,6 +38,7 @@
             {% endfor %}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   </div>

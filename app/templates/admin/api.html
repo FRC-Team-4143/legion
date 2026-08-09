@@ -29,6 +29,7 @@
 <div class="card" style="max-width: 720px;">
   <div class="card-header"><i class="bi bi-plug me-1"></i> Endpoints</div>
   <div class="card-body">
+    <div class="table-responsive">
     <table class="table table-sm mb-3">
       <thead class="table-light"><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead>
       <tbody>
@@ -38,6 +39,7 @@
         <tr><td>GET</td><td><code>/api/subteams</code></td><td>All subteams</td></tr>
       </tbody>
     </table>
+    </div>
     <p class="text-muted small mb-1"><strong>Example:</strong></p>
     <pre class="bg-dark text-light p-2 rounded small mb-0">curl -H "X-API-Key: &lt;key&gt;" \
   "https://&lt;host&gt;/api/members?role=student&amp;active=true"</pre>
