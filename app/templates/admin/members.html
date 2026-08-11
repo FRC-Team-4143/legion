@@ -84,6 +84,9 @@
                 <button class="btn btn-sm btn-outline-danger">Archive</button>
               </form>
               {% endif %}
+            {% elif manager_locked(request) %}
+              <button class="btn btn-sm btn-outline-success" disabled title="Managers can't restore members">Restore</button>
+              <button class="btn btn-sm btn-outline-danger" disabled title="Managers can't permanently delete members"><i class="bi bi-trash"></i></button>
             {% else %}
               <form method="post" action="/admin/members/{{ m.id }}/restore" class="d-inline">
                 <button class="btn btn-sm btn-outline-success">Restore</button>
