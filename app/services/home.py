@@ -90,6 +90,13 @@ def tiles_for(identity: dict) -> list[dict]:
                 "app": "Munus", "tier": "Volunteer Hours",
                 "url": f"{settings.munus_public_url}/me", "icon": _PERSONAL_ICONS["Munus"], "kind": "personal",
             })
+        elif role == "mentor":
+            # Mentors have no /me (student-only) — send them to the opportunities list
+            # instead, where they can see who's signed up for each shift (read-only).
+            tiles.append({
+                "app": "Munus", "tier": "Opportunities",
+                "url": f"{settings.munus_public_url}/opportunities", "icon": _PERSONAL_ICONS["Munus"], "kind": "personal",
+            })
 
     return tiles
 

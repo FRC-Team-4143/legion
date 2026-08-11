@@ -85,21 +85,35 @@ def test_tempus_shop_hours_tile_is_unconditional():
 
 
 def test_munus_admin_and_manager_tiles():
+    """_identity() defaults to role="mentor", so a munus-admin/-manager mentor also
+    picks up the mentor-only Opportunities personal tile alongside their staff tile."""
     original = settings.munus_public_url
     try:
         settings.munus_public_url = "https://munus.example.org"
 
         admin_tiles = tiles_for(_identity(groups=["munus-admin"]))
-        assert admin_tiles == [{
-            "app": "Munus", "tier": "Admin",
-            "url": "https://munus.example.org/admin", "icon": "bi-heart", "kind": "staff",
-        }]
+        assert admin_tiles == [
+            {
+                "app": "Munus", "tier": "Admin",
+                "url": "https://munus.example.org/admin", "icon": "bi-heart", "kind": "staff",
+            },
+            {
+                "app": "Munus", "tier": "Opportunities",
+                "url": "https://munus.example.org/opportunities", "icon": "bi-clipboard-check", "kind": "personal",
+            },
+        ]
 
         manager_tiles = tiles_for(_identity(groups=["munus-manager"]))
-        assert manager_tiles == [{
-            "app": "Munus", "tier": "Manager",
-            "url": "https://munus.example.org/admin", "icon": "bi-heart", "kind": "staff",
-        }]
+        assert manager_tiles == [
+            {
+                "app": "Munus", "tier": "Manager",
+                "url": "https://munus.example.org/admin", "icon": "bi-heart", "kind": "staff",
+            },
+            {
+                "app": "Munus", "tier": "Opportunities",
+                "url": "https://munus.example.org/opportunities", "icon": "bi-clipboard-check", "kind": "personal",
+            },
+        ]
     finally:
         settings.munus_public_url = original
 
@@ -124,14 +138,38 @@ def test_munus_student_portal_tile():
         settings.munus_public_url = original
 
 
+def test_munus_mentor_opportunities_tile():
+    """Mentors have no /me on Munus (student-only) — they get a personal tile to the
+    opportunities list instead, so they can see who's signed up for what."""
+    original = settings.munus_public_url
+    try:
+        settings.munus_public_url = ""
+        assert tiles_for(_identity(role="mentor")) == []
+
+        settings.munus_public_url = "https://munus.example.org"
+        tiles = tiles_for(_identity(role="mentor"))
+        assert tiles == [{
+            "app": "Munus", "tier": "Opportunities",
+            "url": "https://munus.example.org/opportunities", "icon": "bi-clipboard-check", "kind": "personal",
+        }]
+
+        # A mentor who's also a munus-manager gets both tiles independently.
+        both = tiles_for(_identity(groups=["munus-manager"], role="mentor"))
+        assert {t["tier"] for t in both if t["app"] == "Munus"} == {"Manager", "Opportunities"}
+    finally:
+        settings.munus_public_url = original
+
+
 def test_all_three_apps_together():
     original = (settings.tempus_public_url, settings.munus_public_url)
     try:
         settings.tempus_public_url = "https://tempus.example.org"
         settings.munus_public_url = "https://munus.example.org"
         tiles = tiles_for(_identity(groups=["legion-admin", "tempus-admin", "munus-admin"]))
-        # Tempus now yields two tiles (Admin + the unconditional Shop Hours tile).
-        assert [t["app"] for t in tiles] == ["Legion", "Tempus", "Tempus", "Munus"]
+        # Tempus yields two tiles (Admin + the unconditional Shop Hours tile), and Munus
+        # yields two (Admin staff tile + the mentor-only Opportunities personal tile,
+        # since _identity() defaults to role="mentor").
+        assert [t["app"] for t in tiles] == ["Legion", "Tempus", "Tempus", "Munus", "Munus"]
     finally:
         settings.tempus_public_url, settings.munus_public_url = original
 
