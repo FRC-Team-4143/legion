@@ -25,7 +25,6 @@ class Settings(BaseSettings):
     # misconfigured deploy fails closed rather than serving data to anyone.
     tempus_api_key: str = ""
     munus_api_key: str = ""
-    merces_api_key: str = ""
 
     database_url: str = "sqlite+aiosqlite:///./legion.db"
 
@@ -115,7 +114,6 @@ class Settings(BaseSettings):
     # a member's own browser can resolve. Blank = that app's tile is simply omitted.
     tempus_public_url: str = ""
     munus_public_url: str = ""
-    merces_public_url: str = ""
 
     @field_validator("admin_password", "session_secret", "sso_secret")
     @classmethod
