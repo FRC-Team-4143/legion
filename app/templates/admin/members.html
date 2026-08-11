@@ -76,10 +76,14 @@
           <td class="text-end">
             {% if m.is_active %}
               <a href="/admin/members/{{ m.id }}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
+              {% if manager_locked(request) and is_privileged_member(m) %}
+                <button class="btn btn-sm btn-outline-danger" disabled title="Managers can't archive other managers or admins">Archive</button>
+              {% else %}
               <form method="post" action="/admin/members/{{ m.id }}/delete" class="d-inline"
                     onsubmit="return confirm('Archive {{ m.name }}? Their record and member code are kept.')">
                 <button class="btn btn-sm btn-outline-danger">Archive</button>
               </form>
+              {% endif %}
             {% else %}
               <form method="post" action="/admin/members/{{ m.id }}/restore" class="d-inline">
                 <button class="btn btn-sm btn-outline-success">Restore</button>

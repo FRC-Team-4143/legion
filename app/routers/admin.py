@@ -122,6 +122,22 @@ def _section_label(path: str) -> str:
     return "this page"
 
 
+def _forbidden(request: Request, section: str):
+    """Render the shared "No Access" page for `section`, 403. Shared by the coarse
+    group gate below and any route-level business rule (e.g. a manager targeting
+    another manager/admin) that needs the same denial treatment."""
+    identity = sso_identity(request)
+    return templates.TemplateResponse(
+        "admin/forbidden.html",
+        {
+            "request": request,
+            "name": identity.get("name", "") if identity else "",
+            "section": section,
+        },
+        status_code=403,
+    )
+
+
 def _require_groups(request: Request, groups: set[str]):
     """Gate a route on the SSO identity holding at least one of `groups`, or the
     break-glass password session. Returns a redirect/403 to short-circuit the route
@@ -130,15 +146,7 @@ def _require_groups(request: Request, groups: set[str]):
     if identity is not None:
         if groups & set(identity.get("groups") or []) or _is_authenticated(request):
             return None
-        return templates.TemplateResponse(
-            "admin/forbidden.html",
-            {
-                "request": request,
-                "name": identity.get("name", ""),
-                "section": _section_label(request.url.path),
-            },
-            status_code=403,
-        )
+        return _forbidden(request, _section_label(request.url.path))
     if _is_authenticated(request):
         return None
     return_to = quote(str(request.url.path), safe="")
@@ -148,15 +156,45 @@ def _require_groups(request: Request, groups: set[str]):
 def _require_auth(request: Request):
     """Full admin access: the `legion-admin` group, or the break-glass password
     session. Gates everything security-sensitive — groups, teams/subteams, CSV import,
-    API access info, audit log, backup, and destructive/bulk member actions."""
+    API access info, audit log, backup, and restore/purge/bulk member actions."""
     return _require_groups(request, {"legion-admin"})
 
 
 def _require_staff(request: Request):
     """Routine roster upkeep: `legion-admin` OR `legion-manager`, or break-glass.
-    Deliberately narrow — day-to-day member CRUD only. Managers can't touch group
-    membership (that stays admin-only; see routers/admin.py's "User Groups" section)."""
+    Deliberately narrow — day-to-day member CRUD plus archiving (soft-delete only; see
+    the member-privilege check in `admin_members_delete`). Managers can't touch group
+    membership (that stays admin-only; see routers/admin.py's "User Groups" section) or
+    permanently purge/restore a member."""
     return _require_groups(request, {"legion-admin", "legion-manager"})
+
+
+def _manager_locked(request: Request) -> bool:
+    """True when the viewer is a `legion-manager` without full `legion-admin` access
+    (break-glass password sessions always grant full access regardless of SSO groups) —
+    drives the red padlock the sidebar shows next to admin-only sections."""
+    if _is_authenticated(request):
+        return False
+    identity = sso_identity(request)
+    if identity is None:
+        return False
+    groups = set(identity.get("groups") or [])
+    return "legion-manager" in groups and "legion-admin" not in groups
+
+
+templates.env.globals["manager_locked"] = _manager_locked
+
+_PRIVILEGED_GROUP_SLUGS = {"legion-admin", "legion-manager"}
+
+
+def _is_privileged_member(member: Member) -> bool:
+    """True if `member` holds `legion-admin` or `legion-manager` — the groups a
+    manager (without full admin) is not allowed to archive. Requires `member.groups`
+    already loaded (`selectinload`)."""
+    return any(g.slug in _PRIVILEGED_GROUP_SLUGS for g in member.groups)
+
+
+templates.env.globals["is_privileged_member"] = _is_privileged_member
 
 
 # ── Login / logout ─────────────────────────────────────────────────────────────
@@ -266,7 +304,9 @@ async def admin_members_list(
 
     q = (
         select(Member)
-        .options(selectinload(Member.team), selectinload(Member.subteam))
+        .options(
+            selectinload(Member.team), selectinload(Member.subteam), selectinload(Member.groups)
+        )
         .order_by(Member.name)
     )
     if not show_archived:
@@ -436,11 +476,20 @@ async def admin_members_regenerate_username(member_id: int, request: Request, db
 
 @router.post("/members/{member_id}/delete")
 async def admin_members_delete(member_id: int, request: Request, db: AsyncSession = Depends(get_db)):
-    """Archive a member (soft delete) — keeps the record and its member_code on file."""
-    if redirect := _require_auth(request):
+    """Archive a member (soft delete) — keeps the record and its member_code on file.
+    Open to `legion-manager` as routine roster upkeep, same tier as create/edit — but a
+    manager without full `legion-admin` can't archive another manager or an admin (only
+    a full admin can), so a manager can never sideline their own oversight."""
+    if redirect := _require_staff(request):
         return redirect
-    member = (await db.execute(select(Member).where(Member.id == member_id))).scalars().first()
+    member = (
+        await db.execute(
+            select(Member).options(selectinload(Member.groups)).where(Member.id == member_id)
+        )
+    ).scalars().first()
     if member and member.is_active:
+        if _manager_locked(request) and _is_privileged_member(member):
+            return _forbidden(request, "archiving other managers or admins")
         member.is_active = False
         member.archived_at = datetime.utcnow()
         await audit.record(db, request, "member.archive", f"Archived {member.name}", entity_type="member", entity_id=member.id)

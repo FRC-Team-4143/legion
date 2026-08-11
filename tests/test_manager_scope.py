@@ -1,7 +1,9 @@
 """The `legion-manager` group: routine roster upkeep (dashboard, member list/create/
-edit/regenerate-username) but nothing security-sensitive — no groups, teams, subteams,
-CSV import, API info, audit log, backup, or destructive/bulk member actions. Those stay
-`legion-admin`-only (see `_require_auth` vs `_require_staff` in routers/admin.py)."""
+edit/regenerate-username, archive) but nothing security-sensitive — no groups, teams,
+subteams, CSV import, API info, audit log, backup, restore/purge, or bulk member
+actions. Those stay `legion-admin`-only (see `_require_auth` vs `_require_staff` in
+routers/admin.py). A manager also can't archive another `legion-manager` or
+`legion-admin` member — only a full admin can."""
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -121,14 +123,46 @@ async def test_manager_cannot_view_api_audit_or_backup(client, db, make_member):
     assert (await client.get("/admin/backup")).status_code == 403
 
 
-async def test_manager_cannot_delete_restore_purge_or_bulk_actions(client, db, make_member):
+async def test_manager_can_archive_an_ordinary_member(client, db, make_member):
     await _as_manager(client, db, make_member)
     target = await make_member(name="Target Member")
-    assert (await client.post(f"/admin/members/{target.id}/delete")).status_code == 403
+    target_id = target.id
+    resp = await client.post(f"/admin/members/{target_id}/delete", follow_redirects=False)
+    assert resp.status_code == 303
+
+    db.expire_all()
+    reloaded = (await db.execute(select(Member).where(Member.id == target_id))).scalars().first()
+    assert reloaded.is_active is False
+    assert reloaded.archived_at is not None
+
+
+async def test_manager_cannot_restore_purge_or_bulk_actions(client, db, make_member):
+    await _as_manager(client, db, make_member)
+    target = await make_member(name="Target Member")
     assert (await client.post(f"/admin/members/{target.id}/restore")).status_code == 403
     assert (await client.post(f"/admin/members/{target.id}/purge")).status_code == 403
     assert (await client.post("/admin/members/bump-grades")).status_code == 403
     assert (await client.post("/admin/members/sync-slack")).status_code == 403
+
+
+async def test_manager_cannot_archive_another_manager_or_admin(client, db, make_member):
+    await _as_manager(client, db, make_member)
+    other_manager = await make_member(name="Other Manager", groups=["legion-manager"])
+    admin = await make_member(name="An Admin", groups=["legion-admin"])
+    other_manager_id, admin_id = other_manager.id, admin.id
+
+    assert (await client.post(f"/admin/members/{other_manager_id}/delete")).status_code == 403
+    assert (await client.post(f"/admin/members/{admin_id}/delete")).status_code == 403
+
+    db.expire_all()
+    reloaded_manager = (
+        await db.execute(select(Member).where(Member.id == other_manager_id))
+    ).scalars().first()
+    reloaded_admin = (
+        await db.execute(select(Member).where(Member.id == admin_id))
+    ).scalars().first()
+    assert reloaded_manager.is_active is True
+    assert reloaded_admin.is_active is True
 
 
 async def test_manager_can_create_member_with_slack_id(client, db, make_member):
@@ -191,3 +225,14 @@ async def test_legion_admin_still_has_full_access(client, db, make_member):
     assert (await client.get("/admin/groups")).status_code == 200
     assert (await client.get("/admin/teams")).status_code == 200
     assert (await client.get("/admin/import")).status_code == 200
+
+    # And, unlike a bare manager, a full admin can archive another manager or admin.
+    other_manager = await make_member(name="Other Manager", groups=["legion-manager"])
+    other_manager_id = other_manager.id
+    resp = await client.post(f"/admin/members/{other_manager_id}/delete", follow_redirects=False)
+    assert resp.status_code == 303
+    db.expire_all()
+    reloaded = (
+        await db.execute(select(Member).where(Member.id == other_manager_id))
+    ).scalars().first()
+    assert reloaded.is_active is False

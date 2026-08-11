@@ -108,13 +108,19 @@ Legion is the SSO provider for the MARS/WARS apps (see the dedicated section bel
 `routers/admin.py` (checks the `mw_sso` cookie's `groups` claim, or falls back to the
 break-glass `admin_session` password cookie, 12h): `_require_auth` needs `legion-admin`
 and covers everything, while `_require_staff` accepts `legion-admin` **or**
-`legion-manager` and is used only on the dashboard and member list/create/edit/
-regenerate-username routes. Every other route (groups — including membership,
-teams/subteams, CSV import, API-access/audit-log/backup pages, and destructive/bulk
-member actions like delete/restore/purge/bump-grades/sync-slack) stays on
-`_require_auth`, i.e. `legion-manager`-only members get a 403 there. There is no
-`is_admin` boolean — it was replaced by the `legion-admin` group (a one-time
-`database.py` migration folds any old `is_admin=1` rows in, then drops the column).
+`legion-manager` and is used on the dashboard, member list/create/edit/
+regenerate-username routes, and member archive (`POST /members/{id}/delete` — soft
+delete, sets `is_active=False`). Every other route (groups — including membership,
+teams/subteams, CSV import, API-access/audit-log/backup pages, and restore/purge/
+bump-grades/sync-slack) stays on `_require_auth`, i.e. `legion-manager`-only members get
+a 403 there — a manager can archive a member but never permanently delete one. Within
+the archive route itself, a `legion-manager` without full `legion-admin` additionally
+can't archive another member who holds `legion-admin` or `legion-manager`
+(`_is_privileged_member` in `routers/admin.py`) — otherwise a manager could sideline a
+peer or an admin's own account. A full admin (or break-glass session) is exempt from
+that check. There is no `is_admin` boolean — it was replaced by the `legion-admin` group
+(a one-time `database.py` migration folds any old `is_admin=1` rows in, then drops the
+column).
 There is still no *sibling-app* consumption of the SSO cookie yet (Tempus/Munus) — this
 repo only provides the provider side and the documented contract (README "Single
 sign-on" section).
