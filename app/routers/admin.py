@@ -532,9 +532,16 @@ async def admin_members_purge(member_id: int, request: Request, db: AsyncSession
 async def admin_members_bump_grades(request: Request, db: AsyncSession = Depends(get_db)):
     """Yearly grade auto-increase: advance every active student one grade. A senior
     graduates to alumni AND is archived (dropped from active rosters / API syncs).
-    Students with no grade set are left untouched."""
+    Students with no grade set are left untouched. A student who lands on Junior this
+    run is also moved onto team 4143 if they weren't already on it — MARS' Minions
+    (4423) is the underclassman team, so reaching Junior is the trigger to move up to
+    MARS/WARS. Only fires on the transition itself, not on students who were already
+    Junior before this run (so an intentional manual placement isn't silently undone
+    by re-running this action)."""
     if redirect := _require_auth(request):
         return redirect
+
+    team_4143 = (await db.execute(select(Team).where(Team.number == 4143))).scalars().first()
 
     students = (
         await db.execute(
@@ -546,7 +553,7 @@ async def admin_members_bump_grades(request: Request, db: AsyncSession = Depends
         )
     ).scalars().all()
 
-    bumped = graduated = 0
+    bumped = graduated = team_moved = 0
     for s in students:
         if s.grade == StudentGrade.alumni:
             continue  # already graduated
@@ -558,16 +565,23 @@ async def admin_members_bump_grades(request: Request, db: AsyncSession = Depends
         else:
             s.grade = GRADE_ORDER[GRADE_ORDER.index(s.grade) + 1]
             bumped += 1
+            if s.grade == StudentGrade.junior and team_4143 is not None and s.team_id != team_4143.id:
+                s.team_id = team_4143.id
+                team_moved += 1
 
     if bumped or graduated:
         await audit.record(
             db, request, "member.bump_grades",
-            f"Yearly grade increase: {bumped} advanced, {graduated} graduated + archived",
+            f"Yearly grade increase: {bumped} advanced, {graduated} graduated + archived, "
+            f"{team_moved} moved to 4143",
             entity_type="member",
-            detail={"bumped": bumped, "graduated": graduated},
+            detail={"bumped": bumped, "graduated": graduated, "team_moved": team_moved},
         )
         await db.commit()
-    msg = f"Grade increase: {bumped} advanced, {graduated} graduated and archived."
+    msg = (
+        f"Grade increase: {bumped} advanced, {graduated} graduated and archived, "
+        f"{team_moved} moved to team 4143."
+    )
     return RedirectResponse(f"/admin/members?message={quote(msg)}", status_code=303)
 
 
