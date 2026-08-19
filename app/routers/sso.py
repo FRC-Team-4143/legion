@@ -33,8 +33,8 @@ from app.models import AuthRequest, AuthStatus, Member
 from app.routers.api import require_api_key
 from app.services import slack_auth, throttle
 from app.services.sso import (
-    allowed_return_to, clear_sso_cookie, get_device_id, set_device_cookie, set_sso_cookie,
-    sso_identity,
+    allowed_return_to, clear_sso_cookie, get_device_id, is_slack_in_app_browser,
+    set_device_cookie, set_sso_cookie, slack_escape_url, sso_identity,
 )
 
 router = APIRouter(prefix="/sso")
@@ -45,6 +45,18 @@ _NONCE_BYTES = 24
 
 def _client_ip(request: Request) -> Optional[str]:
     return request.client.host if request.client else None
+
+
+def _slack_escape_response(request: Request) -> Optional[HTMLResponse]:
+    """An interstitial that bounces Slack's Android in-app browser out to the system
+    browser, or None if this request isn't coming from it. Call before minting any
+    cookie or Slack push — see `services.sso`'s "Slack in-app browser escape" section
+    for why."""
+    if not is_slack_in_app_browser(request.headers.get("user-agent")):
+        return None
+    return templates.TemplateResponse(
+        "sso/escape.html", {"request": request, "escape_url": slack_escape_url(request)}
+    )
 
 
 def _append_state(target: str, state: str) -> str:
@@ -90,6 +102,10 @@ async def sso_authorize_get(request: Request, app: str = "", return_to: str = "/
     # Already signed in — real SSO, no prompt needed.
     if sso_identity(request):
         return RedirectResponse(_append_state(target, state), status_code=303)
+
+    escape = _slack_escape_response(request)
+    if escape is not None:
+        return escape
 
     response = templates.TemplateResponse(
         "sso/login.html",
@@ -216,6 +232,10 @@ async def sso_pending(nonce: str, request: Request, db: AsyncSession = Depends(g
     """Public landing page for a challenge started via POST /sso/challenge — the same
     "check Slack" polling page GET/POST /sso/authorize renders, just addressable by
     nonce alone since there's no form submission to render it from here."""
+    escape = _slack_escape_response(request)
+    if escape is not None:
+        return escape
+
     auth_request = (
         await db.execute(select(AuthRequest).where(AuthRequest.nonce == nonce))
     ).scalars().first()

@@ -9,7 +9,7 @@ needed. Single sign-out is just `clear_sso_cookie` (`/sso/logout`). Mirrors Munu
 """
 import secrets
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from fastapi import Request, Response
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -79,6 +79,38 @@ def set_device_cookie(response: Response, device_id: str) -> None:
         httponly=True, samesite="lax", secure=True, max_age=DEVICE_MAX_AGE,
         domain=settings.sso_cookie_domain or None,
     )
+
+
+# ── Slack in-app browser escape (Android) ────────────────────────────────────────
+#
+# Slack's Android in-app browser is a separate, effectively ephemeral WebView — unlike
+# Chrome Custom Tabs, it doesn't share cookie storage with the system browser, and
+# closing it back to Slack discards whatever it stored. That silently breaks mw_sso
+# reuse: the cookie set during one Slack-opened tab is gone by the next one, so a
+# member who already approved a sign-in gets a fresh Approve/Deny push every single
+# time (the "no repeated push" case `services/legion_auth.py`'s `/enter` is built
+# around never actually holds on Android Slack). The fix is to hand the very first
+# unauthenticated hit off to the real system browser before the cookie is even minted,
+# so the whole approve/poll/complete sequence — and the cookie it sets — lands
+# somewhere persistent.
+
+def is_slack_in_app_browser(user_agent: Optional[str]) -> bool:
+    """True for Slack's Android in-app browser, identified by its own UA token."""
+    ua = (user_agent or "").lower()
+    return "slack" in ua and "android" in ua
+
+
+def slack_escape_url(request: Request) -> str:
+    """An Android `intent://` URL that hands the current page off to the device's
+    default browser. No `package=` pin — that lets Android resolve it through
+    whatever the user's actual default browser is, rather than forcing Chrome.
+    Built from `settings.base_url` (not `request.url`'s scheme/host) since this app
+    isn't guaranteed to see forwarded proto/host correctly behind the reverse proxy."""
+    target = f"{settings.base_url}{request.url.path}"
+    if request.url.query:
+        target += f"?{request.url.query}"
+    scheme, rest = target.split("://", 1)
+    return f"intent://{rest}#Intent;scheme={scheme};S.browser_fallback_url={quote(target, safe='')};end"
 
 
 # ── Open-redirect guard ──────────────────────────────────────────────────────────
