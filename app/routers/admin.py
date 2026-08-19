@@ -41,6 +41,7 @@ templates.env.filters["localdt"] = (
 )
 templates.env.filters["rolelabel"] = role_label
 templates.env.filters["gradelabel"] = grade_label
+templates.env.filters["graderank"] = lambda g: GRADE_ORDER.index(g) if g in GRADE_ORDER else -1
 
 _signer = URLSafeTimedSerializer(settings.session_secret, salt="admin-session")
 _COOKIE = "admin_session"
@@ -277,28 +278,12 @@ async def admin_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
 
 # ── Members ────────────────────────────────────────────────────────────────────
 
-_MEMBER_SORT_KEYS = ("name", "grade", "team", "subteam")
-
-
-def _member_sort_key(sort: str):
-    if sort == "grade":
-        return lambda m: (GRADE_ORDER.index(m.grade) if m.grade in GRADE_ORDER else -1)
-    if sort == "team":
-        return lambda m: (m.team.number if m.team else -1)
-    if sort == "subteam":
-        return lambda m: (m.subteam.label.lower() if m.subteam else "")
-    return lambda m: m.name.lower()
-
-
 @router.get("/members", response_class=HTMLResponse)
-async def admin_members_list(
-    request: Request,
-    role: str = "",
-    show_archived: int = 0,
-    sort: str = "name",
-    dir: str = "asc",
-    db: AsyncSession = Depends(get_db),
-):
+async def admin_members_list(request: Request, db: AsyncSession = Depends(get_db)):
+    """Filtering/sorting on this page is handled client-side (Excel-style column
+    filters + sortable headers, see static/js/table-filter-sort.js) — the full
+    active + archived roster is always fetched so the JS has the complete dataset
+    to filter/sort in the browser."""
     if redirect := _require_staff(request):
         return redirect
 
@@ -309,16 +294,7 @@ async def admin_members_list(
         )
         .order_by(Member.name)
     )
-    if not show_archived:
-        q = q.where(Member.is_active.is_(True))
-    role_filter = role if role in ("student", "mentor") else ""
-    if role_filter:
-        q = q.where(Member.role == MemberRole(role_filter))
     members = (await db.execute(q)).scalars().all()
-
-    sort = sort if sort in _MEMBER_SORT_KEYS else "name"
-    sort_dir = dir if dir in ("asc", "desc") else "asc"
-    members = sorted(members, key=_member_sort_key(sort), reverse=(sort_dir == "desc"))
 
     return templates.TemplateResponse(
         "admin/members.html",
@@ -329,10 +305,6 @@ async def admin_members_list(
             "subteams": await _active_subteams(db),
             "roles": list(MemberRole),
             "grades": list(StudentGrade),
-            "role_filter": role_filter,
-            "show_archived": bool(show_archived),
-            "sort": sort,
-            "dir": sort_dir,
             "error": request.query_params.get("error"),
             "message": request.query_params.get("message"),
         },
@@ -494,7 +466,7 @@ async def admin_members_delete(member_id: int, request: Request, db: AsyncSessio
         member.archived_at = datetime.utcnow()
         await audit.record(db, request, "member.archive", f"Archived {member.name}", entity_type="member", entity_id=member.id)
         await db.commit()
-    return RedirectResponse("/admin/members?show_archived=1", status_code=303)
+    return RedirectResponse("/admin/members?status=archived", status_code=303)
 
 
 @router.post("/members/{member_id}/restore")
@@ -507,7 +479,7 @@ async def admin_members_restore(member_id: int, request: Request, db: AsyncSessi
         member.archived_at = None
         await audit.record(db, request, "member.restore", f"Restored {member.name}", entity_type="member", entity_id=member.id)
         await db.commit()
-    return RedirectResponse("/admin/members?show_archived=1", status_code=303)
+    return RedirectResponse("/admin/members?status=archived", status_code=303)
 
 
 @router.post("/members/{member_id}/purge")
@@ -525,7 +497,7 @@ async def admin_members_purge(member_id: int, request: Request, db: AsyncSession
         )
         await db.execute(delete(Member).where(Member.id == member_id))
         await db.commit()
-    return RedirectResponse("/admin/members?show_archived=1", status_code=303)
+    return RedirectResponse("/admin/members?status=archived", status_code=303)
 
 
 @router.post("/members/bump-grades")

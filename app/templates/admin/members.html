@@ -2,27 +2,45 @@
 {% set active_page = "members" %}
 {% block title %}Members — Legion Admin{% endblock %}
 
-{% macro sort_th(label, key) %}
-<th>
-  <a href="/admin/members?sort={{ key }}&dir={{ 'desc' if sort == key and dir == 'asc' else 'asc' }}{% if role_filter %}&role={{ role_filter }}{% endif %}{% if show_archived %}&show_archived=1{% endif %}"
-     class="text-decoration-none text-reset d-inline-flex align-items-center gap-1">
-    {{ label }}
-    {% if sort == key %}<i class="bi bi-caret-{{ 'up' if dir == 'asc' else 'down' }}-fill"></i>{% else %}<i class="bi bi-caret-down-fill opacity-25"></i>{% endif %}
-  </a>
-</th>
-{% endmacro %}
-
-{% set sort_qs = ('&sort=' ~ sort if sort and sort != 'name' else '') ~ ('&dir=' ~ dir if dir and dir != 'asc' else '') %}
+{% block head %}
+<style>
+  .fs-th .th-inner { gap: .35rem; }
+  .sort-icon { font-size: .75rem; cursor: pointer; }
+  .filter-funnel-btn {
+    border: none;
+    background: none;
+    padding: 0 .15rem;
+    line-height: 1;
+    min-width: 1em;
+    min-height: 1em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #9a7878;
+    cursor: pointer;
+  }
+  .filter-funnel-btn:hover, .filter-funnel-btn.active { color: #e05540; }
+  .filter-dropdown-menu {
+    min-width: 220px;
+    max-width: 280px;
+    background: #111111;
+    border: 1px solid #2a1a1a;
+  }
+  .filter-checkbox-list {
+    max-height: 240px;
+    overflow-y: auto;
+    margin-bottom: .25rem;
+  }
+  .filter-dropdown-menu .form-check-label { color: #f0e8e8; }
+  .filter-dropdown-menu a.small { color: #e05540; text-decoration: none; }
+  .filter-dropdown-menu a.small:hover { text-decoration: underline; }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <h2 class="mb-0">Members</h2>
   <div class="d-flex gap-2 flex-wrap">
-    {% if show_archived %}
-    <a href="/admin/members?{% if role_filter %}role={{ role_filter }}{% endif %}{{ sort_qs }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-eye-slash me-1"></i> Hide Archived</a>
-    {% else %}
-    <a href="/admin/members?show_archived=1{% if role_filter %}&role={{ role_filter }}{% endif %}{{ sort_qs }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-archive me-1"></i> Show Archived</a>
-    {% endif %}
     <form method="post" action="/admin/members/bump-grades" class="d-inline"
           onsubmit="return confirm('Advance every active student one grade? Seniors graduate to Alumni and are archived.')">
       <button class="btn btn-outline-warning btn-sm"><i class="bi bi-arrow-up-circle me-1"></i> Yearly Grade Increase</button>
@@ -42,37 +60,50 @@
 <div class="alert alert-danger alert-dismissible fade show py-2"><i class="bi bi-exclamation-triangle me-1"></i> {{ error }}<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
 {% endif %}
 
-<ul class="nav nav-pills mb-3 gap-2">
-  <li class="nav-item"><a class="btn btn-sm {% if not role_filter %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/admin/members?{% if show_archived %}show_archived=1{% endif %}{{ sort_qs }}">All</a></li>
-  <li class="nav-item"><a class="btn btn-sm {% if role_filter == 'student' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/admin/members?role=student{% if show_archived %}&show_archived=1{% endif %}{{ sort_qs }}">Students</a></li>
-  <li class="nav-item"><a class="btn btn-sm {% if role_filter == 'mentor' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/admin/members?role=mentor{% if show_archived %}&show_archived=1{% endif %}{{ sort_qs }}">Mentors</a></li>
-</ul>
-
 <div class="card">
   <div class="card-body p-0">
     <div class="table-responsive">
-    <table class="table table-hover mb-0 align-middle">
+    <table class="table table-hover mb-0 align-middle" data-filter-sort>
       <thead class="table-light">
         <tr>
-          {{ sort_th('Name', 'name') }}
-          <th>Role</th>
-          {{ sort_th('Team', 'team') }}
-          {{ sort_th('Subteam', 'subteam') }}
-          {{ sort_th('Grade', 'grade') }}
-          <th>Slack UID</th><th>Username</th><th>Member Code</th><th></th>
+          <th class="fs-th" data-col="name" data-sortable="true" data-sort-type="text">
+            <span class="th-inner d-inline-flex align-items-center"><span class="th-label">Name</span></span>
+          </th>
+          <th class="fs-th" data-col="role">
+            <span class="th-inner d-inline-flex align-items-center"><span class="th-label">Role</span></span>
+          </th>
+          <th class="fs-th" data-col="team" data-sortable="true" data-sort-type="num">
+            <span class="th-inner d-inline-flex align-items-center"><span class="th-label">Team</span></span>
+          </th>
+          <th class="fs-th" data-col="subteam" data-sortable="true" data-sort-type="text">
+            <span class="th-inner d-inline-flex align-items-center"><span class="th-label">Subteam</span></span>
+          </th>
+          <th class="fs-th" data-col="grade" data-sortable="true" data-sort-type="num">
+            <span class="th-inner d-inline-flex align-items-center"><span class="th-label">Grade</span></span>
+          </th>
+          <th>Slack UID</th>
+          <th>Username</th>
+          <th>Member Code</th>
+          <th class="fs-th" data-col="status" data-filter-default="{{ request.query_params.get('status', 'active') }}">
+            <span class="th-inner d-inline-flex align-items-center"><span class="th-label">Status</span></span>
+          </th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
         {% for m in members %}
         <tr {% if not m.is_active %}class="table-secondary"{% endif %}>
-          <td>{{ m.name }}{% if not m.is_active %}<span class="badge bg-secondary ms-1">Archived</span>{% endif %}</td>
-          <td>{{ m.role | rolelabel }}</td>
-          <td>{{ m.team.number if m.team else '—' }}</td>
-          <td>{{ m.subteam.label if m.subteam else '—' }}</td>
-          <td>{{ m.grade | gradelabel if m.grade else '—' }}</td>
+          <td data-value="{{ m.name }}">{{ m.name }}</td>
+          <td data-value="{{ m.role.value }}" data-label="{{ m.role | rolelabel }}">{{ m.role | rolelabel }}</td>
+          <td data-value="{{ m.team.number if m.team else '' }}">{{ m.team.number if m.team else '—' }}</td>
+          <td data-value="{{ m.subteam.label if m.subteam else '' }}">{{ m.subteam.label if m.subteam else '—' }}</td>
+          <td data-value="{{ m.grade | graderank if m.grade else '' }}" data-label="{{ m.grade | gradelabel if m.grade else '' }}">{{ m.grade | gradelabel if m.grade else '—' }}</td>
           <td>{{ m.slack_user_id or '—' }}</td>
           <td><code class="text-muted">{{ m.username }}</code></td>
           <td><code class="text-muted">{{ m.member_code }}</code></td>
+          <td data-value="{{ 'active' if m.is_active else 'archived' }}" data-label="{{ 'Active' if m.is_active else 'Archived' }}">
+            {% if m.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Archived</span>{% endif %}
+          </td>
           <td class="text-end">
             {% if m.is_active %}
               <a href="/admin/members/{{ m.id }}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
@@ -99,7 +130,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="9" class="text-center text-muted py-4">No members yet. Add one or import a CSV.</td></tr>
+        <tr><td colspan="10" class="text-center text-muted py-4">No members yet. Add one or import a CSV.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -166,4 +197,7 @@
     </div>
   </div>
 </div>
+
 {% endblock %}
+
+{% block scripts %}<script src="/static/js/table-filter-sort.js" defer></script>{% endblock %}
