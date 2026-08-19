@@ -4,8 +4,10 @@
 
 {% block head %}
 <style>
+  .fs-th { white-space: nowrap; }
   .fs-th .th-inner { gap: .35rem; }
   .sort-icon { font-size: .75rem; cursor: pointer; }
+  .table-responsive { min-height: 160px; }
   .filter-funnel-btn {
     border: none;
     background: none;
@@ -41,6 +43,11 @@
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <h2 class="mb-0">Members</h2>
   <div class="d-flex gap-2 flex-wrap">
+    {% if show_archived %}
+    <a href="/admin/members" class="btn btn-outline-secondary btn-sm"><i class="bi bi-eye-slash me-1"></i> Hide Archived</a>
+    {% else %}
+    <a href="/admin/members?show_archived=1" class="btn btn-outline-secondary btn-sm"><i class="bi bi-archive me-1"></i> Show Archived</a>
+    {% endif %}
     <form method="post" action="/admin/members/bump-grades" class="d-inline"
           onsubmit="return confirm('Advance every active student one grade? Seniors graduate to Alumni and are archived.')">
       <button class="btn btn-outline-warning btn-sm"><i class="bi bi-arrow-up-circle me-1"></i> Yearly Grade Increase</button>
@@ -66,7 +73,7 @@
     <table class="table table-hover mb-0 align-middle" data-filter-sort>
       <thead class="table-light">
         <tr>
-          <th class="fs-th" data-col="name" data-sortable="true" data-sort-type="text">
+          <th class="fs-th" data-col="name" data-sortable="true" data-sort-type="text" data-filter="none">
             <span class="th-inner d-inline-flex align-items-center"><span class="th-label">Name</span></span>
           </th>
           <th class="fs-th" data-col="role">
@@ -84,16 +91,13 @@
           <th>Slack UID</th>
           <th>Username</th>
           <th>Member Code</th>
-          <th class="fs-th" data-col="status" data-filter-default="{{ request.query_params.get('status', 'active') }}">
-            <span class="th-inner d-inline-flex align-items-center"><span class="th-label">Status</span></span>
-          </th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         {% for m in members %}
         <tr {% if not m.is_active %}class="table-secondary"{% endif %}>
-          <td data-value="{{ m.name }}">{{ m.name }}</td>
+          <td data-value="{{ m.name }}">{{ m.name }}{% if not m.is_active %}<span class="badge bg-secondary ms-1">Archived</span>{% endif %}</td>
           <td data-value="{{ m.role.value }}" data-label="{{ m.role | rolelabel }}">{{ m.role | rolelabel }}</td>
           <td data-value="{{ m.team.number if m.team else '' }}">{{ m.team.number if m.team else '—' }}</td>
           <td data-value="{{ m.subteam.label if m.subteam else '' }}">{{ m.subteam.label if m.subteam else '—' }}</td>
@@ -101,9 +105,6 @@
           <td>{{ m.slack_user_id or '—' }}</td>
           <td><code class="text-muted">{{ m.username }}</code></td>
           <td><code class="text-muted">{{ m.member_code }}</code></td>
-          <td data-value="{{ 'active' if m.is_active else 'archived' }}" data-label="{{ 'Active' if m.is_active else 'Archived' }}">
-            {% if m.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Archived</span>{% endif %}
-          </td>
           <td class="text-end">
             {% if m.is_active %}
               <a href="/admin/members/{{ m.id }}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
@@ -130,7 +131,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="10" class="text-center text-muted py-4">No members yet. Add one or import a CSV.</td></tr>
+        <tr><td colspan="9" class="text-center text-muted py-4">No members yet. Add one or import a CSV.</td></tr>
         {% endfor %}
       </tbody>
     </table>
