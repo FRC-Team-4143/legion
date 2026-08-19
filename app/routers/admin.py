@@ -279,11 +279,13 @@ async def admin_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
 # ── Members ────────────────────────────────────────────────────────────────────
 
 @router.get("/members", response_class=HTMLResponse)
-async def admin_members_list(request: Request, db: AsyncSession = Depends(get_db)):
-    """Filtering/sorting on this page is handled client-side (Excel-style column
-    filters + sortable headers, see static/js/table-filter-sort.js) — the full
-    active + archived roster is always fetched so the JS has the complete dataset
-    to filter/sort in the browser."""
+async def admin_members_list(
+    request: Request, show_archived: int = 0, db: AsyncSession = Depends(get_db)
+):
+    """Sorting/column-filtering on this page is client-side (Excel-style, see
+    static/js/table-filter-sort.js), but archived members are still excluded at the
+    query level by default — keeps them out of the DOM entirely (and therefore out
+    of every column's filter dropdown) until "Show Archived" is toggled on."""
     if redirect := _require_staff(request):
         return redirect
 
@@ -294,6 +296,8 @@ async def admin_members_list(request: Request, db: AsyncSession = Depends(get_db
         )
         .order_by(Member.name)
     )
+    if not show_archived:
+        q = q.where(Member.is_active.is_(True))
     members = (await db.execute(q)).scalars().all()
 
     return templates.TemplateResponse(
@@ -305,6 +309,7 @@ async def admin_members_list(request: Request, db: AsyncSession = Depends(get_db
             "subteams": await _active_subteams(db),
             "roles": list(MemberRole),
             "grades": list(StudentGrade),
+            "show_archived": bool(show_archived),
             "error": request.query_params.get("error"),
             "message": request.query_params.get("message"),
         },
@@ -466,7 +471,7 @@ async def admin_members_delete(member_id: int, request: Request, db: AsyncSessio
         member.archived_at = datetime.utcnow()
         await audit.record(db, request, "member.archive", f"Archived {member.name}", entity_type="member", entity_id=member.id)
         await db.commit()
-    return RedirectResponse("/admin/members?status=archived", status_code=303)
+    return RedirectResponse("/admin/members?show_archived=1", status_code=303)
 
 
 @router.post("/members/{member_id}/restore")
@@ -479,7 +484,7 @@ async def admin_members_restore(member_id: int, request: Request, db: AsyncSessi
         member.archived_at = None
         await audit.record(db, request, "member.restore", f"Restored {member.name}", entity_type="member", entity_id=member.id)
         await db.commit()
-    return RedirectResponse("/admin/members?status=archived", status_code=303)
+    return RedirectResponse("/admin/members?show_archived=1", status_code=303)
 
 
 @router.post("/members/{member_id}/purge")
@@ -497,7 +502,7 @@ async def admin_members_purge(member_id: int, request: Request, db: AsyncSession
         )
         await db.execute(delete(Member).where(Member.id == member_id))
         await db.commit()
-    return RedirectResponse("/admin/members?status=archived", status_code=303)
+    return RedirectResponse("/admin/members?show_archived=1", status_code=303)
 
 
 @router.post("/members/bump-grades")
