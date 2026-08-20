@@ -88,7 +88,6 @@
           <th class="fs-th" data-col="grade" data-sortable="true" data-sort-type="num">
             <span class="th-inner d-inline-flex align-items-center"><span class="th-label">Grade</span></span>
           </th>
-          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -102,30 +101,6 @@
           <td data-value="{{ m.team.number if m.team else '' }}">{{ m.team.number if m.team else '—' }}</td>
           <td data-value="{{ m.subteam.label if m.subteam else '' }}">{{ m.subteam.label if m.subteam else '—' }}</td>
           <td data-value="{{ m.grade | graderank if m.grade else '' }}" data-label="{{ m.grade | gradelabel if m.grade else '' }}">{{ m.grade | gradelabel if m.grade else '—' }}</td>
-          <td class="text-end">
-            {% if m.is_active %}
-              <a href="/admin/members/{{ m.id }}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
-              {% if manager_locked(request) and is_privileged_member(m) %}
-                <button class="btn btn-sm btn-outline-danger" disabled title="Managers can't archive other managers or admins">Archive</button>
-              {% else %}
-              <form method="post" action="/admin/members/{{ m.id }}/delete" class="d-inline"
-                    onsubmit="return confirm('Archive {{ m.name }}? Their record and member code are kept.')">
-                <button class="btn btn-sm btn-outline-danger">Archive</button>
-              </form>
-              {% endif %}
-            {% elif manager_locked(request) %}
-              <button class="btn btn-sm btn-outline-success" disabled title="Managers can't restore members">Restore</button>
-              <button class="btn btn-sm btn-outline-danger" disabled title="Managers can't permanently delete members"><i class="bi bi-trash"></i></button>
-            {% else %}
-              <form method="post" action="/admin/members/{{ m.id }}/restore" class="d-inline">
-                <button class="btn btn-sm btn-outline-success">Restore</button>
-              </form>
-              <form method="post" action="/admin/members/{{ m.id }}/purge" class="d-inline"
-                    onsubmit="return confirm('Permanently delete {{ m.name }}? This cannot be undone.')">
-                <button class="btn btn-sm btn-outline-danger" title="Delete permanently"><i class="bi bi-trash"></i></button>
-              </form>
-            {% endif %}
-          </td>
         </tr>
         <div class="modal fade" id="memberDetail{{ m.id }}" tabindex="-1">
           <div class="modal-dialog"><div class="modal-content">
@@ -164,12 +139,34 @@
               </dl>
             </div>
             <div class="modal-footer">
+              {% if m.is_active %}
+                <a href="/admin/members/{{ m.id }}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
+                {% if manager_locked(request) and is_privileged_member(m) %}
+                  <button class="btn btn-sm btn-outline-danger" disabled title="Managers can't archive other managers or admins">Archive</button>
+                {% else %}
+                <form method="post" action="/admin/members/{{ m.id }}/delete" class="d-inline"
+                      onsubmit="return confirm('Archive {{ m.name }}? Their record and member code are kept.')">
+                  <button class="btn btn-sm btn-outline-danger">Archive</button>
+                </form>
+                {% endif %}
+              {% elif manager_locked(request) %}
+                <button class="btn btn-sm btn-outline-success" disabled title="Managers can't restore members">Restore</button>
+                <button class="btn btn-sm btn-outline-danger" disabled title="Managers can't permanently delete members"><i class="bi bi-trash"></i></button>
+              {% else %}
+                <form method="post" action="/admin/members/{{ m.id }}/restore" class="d-inline">
+                  <button class="btn btn-sm btn-outline-success">Restore</button>
+                </form>
+                <form method="post" action="/admin/members/{{ m.id }}/purge" class="d-inline"
+                      onsubmit="return confirm('Permanently delete {{ m.name }}? This cannot be undone.')">
+                  <button class="btn btn-sm btn-outline-danger" title="Delete permanently"><i class="bi bi-trash"></i></button>
+                </form>
+              {% endif %}
               <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
           </div></div>
         </div>
         {% else %}
-        <tr><td colspan="6" class="text-center text-muted py-4">No members yet. Add one or import a CSV.</td></tr>
+        <tr><td colspan="5" class="text-center text-muted py-4">No members yet. Add one or import a CSV.</td></tr>
         {% endfor %}
       </tbody>
     </table>
