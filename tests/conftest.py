@@ -98,6 +98,7 @@ async def make_member(db):
         grade: StudentGrade | None = None,
         parent_guardian_1: str | None = None,
         parent_guardian_2: str | None = None,
+        graduation_year: int | None = None,
     ) -> Member:
         team_id = None
         if team_number is not None:
@@ -125,6 +126,7 @@ async def make_member(db):
             grade=grade,
             parent_guardian_1=parent_guardian_1,
             parent_guardian_2=parent_guardian_2,
+            graduation_year=graduation_year,
         )
         db.add(m)
         await db.commit()

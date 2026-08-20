@@ -1,4 +1,6 @@
 """Yearly grade auto-increase: /admin/members/bump-grades."""
+from datetime import datetime
+
 from sqlalchemy import select
 
 from app.models import Member, MemberRole, StudentGrade, Team
@@ -30,15 +32,18 @@ async def test_bump_advances_and_graduates(client, db, make_member):
     assert (await _get(db, "Frosh")).grade == StudentGrade.sophomore
     assert (await _get(db, "Junior Jim")).grade == StudentGrade.senior
 
-    # A senior graduates to alumni AND is archived.
+    # A senior graduates to alumni AND is archived AND gets graduation_year set.
     sue = await _get(db, "Senior Sue")
     assert sue.grade == StudentGrade.alumni
     assert sue.is_active is False
+    assert sue.graduation_year == datetime.utcnow().year
 
-    # Already-alumni are left alone (and stay active).
+    # Already-alumni are left alone (and stay active) — including graduation_year,
+    # which is deliberately NOT auto-backfilled for alumni who predate this field.
     grad = await _get(db, "Old Grad")
     assert grad.grade == StudentGrade.alumni
     assert grad.is_active is True
+    assert grad.graduation_year is None
 
     # Grade-less students and mentors are untouched.
     assert (await _get(db, "No Grade")).grade is None

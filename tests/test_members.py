@@ -101,6 +101,21 @@ async def test_serialize_member_exposes_grade_but_not_guardians(db, make_member)
     assert "parent_guardian_2" not in data
 
 
+async def test_serialize_member_exposes_graduation_year(db, make_member):
+    await make_member(
+        name="Alumna Alice", role=MemberRole.student, grade=StudentGrade.alumni,
+        graduation_year=2024,
+    )
+    data = serialize_member(await _loaded(db, "Alumna Alice"))
+    assert data["graduation_year"] == 2024
+
+
+async def test_serialize_member_graduation_year_null_when_unset(db, make_member):
+    await make_member(name="Current Student", role=MemberRole.student, grade=StudentGrade.junior)
+    data = serialize_member(await _loaded(db, "Current Student"))
+    assert data["graduation_year"] is None
+
+
 async def test_serialize_member_grade_null_for_mentor(db, make_member):
     await make_member(name="No Grade", role=MemberRole.mentor)
     data = serialize_member(await _loaded(db, "No Grade"))

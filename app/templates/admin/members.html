@@ -140,6 +140,7 @@
                 <dt class="col-sm-4">Subteam</dt><dd class="col-sm-8">{{ m.subteam.label if m.subteam else '—' }}</dd>
                 {% if m.role.value == 'student' %}
                 <dt class="col-sm-4">Grade</dt><dd class="col-sm-8">{{ m.grade | gradelabel }}</dd>
+                <dt class="col-sm-4">Graduation Year</dt><dd class="col-sm-8">{{ m.graduation_year or '—' }}</dd>
                 <dt class="col-sm-4">Parent / Guardian 1</dt><dd class="col-sm-8">{% if m.parent_guardian_1 %}<code class="text-muted">{{ m.parent_guardian_1 }}</code>{% else %}—{% endif %}</dd>
                 <dt class="col-sm-4">Parent / Guardian 2</dt><dd class="col-sm-8">{% if m.parent_guardian_2 %}<code class="text-muted">{{ m.parent_guardian_2 }}</code>{% else %}—{% endif %}</dd>
                 {% endif %}
@@ -220,6 +221,10 @@
           <div class="mb-3">
             <label class="form-label">Parent / Guardian 2 Slack ID <small class="text-muted">(students only)</small></label>
             <input name="parent_guardian_2" class="form-control" maxlength="200" placeholder="U01ABC...">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Graduation Year <small class="text-muted">(students only)</small></label>
+            <input type="number" name="graduation_year" class="form-control" min="1900" max="2200" placeholder="2027">
           </div>
         </div>
         <div class="modal-footer">

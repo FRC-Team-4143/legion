@@ -80,7 +80,10 @@ Alumni) and up to two **Parent/Guardian** Slack user IDs (the guardian's own Sla
 account, not their name). Grade + guardians are student-only — they're ignored for
 mentors. Guardian IDs are **not** exposed on the read API; `grade` is (as `grade`). The
 Members page has a **Yearly Grade Increase** button that advances every active student
-one grade; seniors graduate to **Alumni** and are archived.
+one grade; seniors graduate to **Alumni**, are archived, and have **Graduation Year**
+set to the current calendar year. Graduation year is *not* auto-backfilled for alumni
+who graduated before this field existed — an admin can set it by hand (edit form or CSV
+import) if they want that historic record.
 
 ## Slack profile sync
 
@@ -100,7 +103,8 @@ Columns: `role` (student|mentor, required), `name` (required), `team_number` (op
 must be an existing team), `subteam` (optional, a subteam slug), `slack_user_id`
 (optional, unique), `grade` (optional, students only —
 a grade name like `Sophomore`), `parent_guardian_1` / `parent_guardian_2` (optional,
-students only — the guardian's Slack `U...` ID, not their name). Existing members are
+students only — the guardian's Slack `U...` ID, not their name), `graduation_year`
+(optional, students only — a 4-digit year). Existing members are
 matched by name (case-insensitive) and updated; new
 members get a fresh `member_code` and `username`. Group membership is deliberately not
 importable — granting admin access (any group) always goes through the edit form, so a

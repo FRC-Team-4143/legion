@@ -45,10 +45,12 @@ def serialize_member(member: Member) -> dict:
         "groups": [g.slug for g in member.groups],
         "slack_user_id": member.slack_user_id,
         "is_active": member.is_active,
-        # School year is useful roster metadata for consumers. Parent/guardian names are
-        # intentionally NOT exposed on the API — that PII is only needed by the admin UI
-        # (reads the ORM object) and Legion's own Slack push (operates in-process).
+        # School year + graduation year are useful roster metadata for consumers.
+        # Parent/guardian Slack IDs are intentionally NOT exposed on the API — that's
+        # only needed by the admin UI (reads the ORM object) and Legion's own Slack push
+        # (operates in-process).
         "grade": member.grade.value if member.grade else None,
+        "graduation_year": member.graduation_year,
         "updated_at": isoformat_utc(member.updated_at),
     }
 

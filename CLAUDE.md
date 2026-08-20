@@ -126,8 +126,8 @@ link and is **unique when set**.
 
 ### Members are unified
 Students and mentors are one `members` table discriminated by `role` (`MemberRole`).
-Team and focus group are nullable FKs. `grade` (`StudentGrade` enum) and
-`parent_guardian_1/2` are student-only — they live on every row but app logic gates them
+Team and focus group are nullable FKs. `grade` (`StudentGrade` enum), `parent_guardian_1/2`,
+and `graduation_year` are student-only — they live on every row but app logic gates them
 to the right role (clears them for mentors). `parent_guardian_1/2` hold the guardian's
 own Slack user ID (e.g. `U01ABC123`), not their name — see "Slack profile sync" below for
 why. There is no mentor "lead" flag (removed —
@@ -135,8 +135,12 @@ Tempus has its own `is_lead` for escalation DMs, but it's local to Tempus's own 
 table, not synced from Legion). Soft-delete via `is_active` + `archived_at`, matching the
 siblings. The **Yearly Grade
 Increase** admin action (`/admin/members/bump-grades`) walks `GRADE_ORDER`; a senior
-graduates to `alumni` and is archived. `grade` is exposed on the read API; guardian
-IDs are deliberately **not** (PII, and no consumer needs them).
+graduates to `alumni`, is archived, and gets `graduation_year` set to the current
+calendar year — deliberately **not** auto-backfilled for alumni who graduated before
+this field existed (no reliable record of when past bumps ran), though an admin can
+enter it by hand via the edit form or CSV import. `grade` and `graduation_year` are
+exposed on the read API; guardian IDs are deliberately **not** (PII, and no consumer
+needs them).
 
 ### Subteams & teams are data, not enums
 `subteams` and `teams` are admin-editable tables (unlike Tempus's hardcoded

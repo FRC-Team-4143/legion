@@ -85,10 +85,10 @@ async def test_import_requires_auth(client, db):
 async def test_import_grade_and_guardians(client, db):
     await _login(client)
     csv_text = (
-        "role,name,grade,parent_guardian_1,parent_guardian_2\n"
-        "student,Ada Byron,Sophomore,U03ANNE01,U03GEO001\n"       # label form
-        "student,Bea Green,junior_high,,\n"                        # enum-value form
-        "mentor,Cyril Fox,Senior,U03IGNORE,\n"                    # grade/parent ignored for mentors
+        "role,name,grade,parent_guardian_1,parent_guardian_2,graduation_year\n"
+        "student,Ada Byron,Sophomore,U03ANNE01,U03GEO001,2028\n"  # label form
+        "student,Bea Green,junior_high,,,\n"                       # enum-value form
+        "mentor,Cyril Fox,Senior,U03IGNORE,,2025\n"                # grade/parent/year ignored for mentors
     )
     resp = await client.post("/admin/import", files=_csv_upload(csv_text))
     assert resp.status_code == 200
@@ -97,13 +97,28 @@ async def test_import_grade_and_guardians(client, db):
     assert ada.grade == StudentGrade.sophomore
     assert ada.parent_guardian_1 == "U03ANNE01"
     assert ada.parent_guardian_2 == "U03GEO001"
+    assert ada.graduation_year == 2028
 
     assert (await _member(db, "Bea Green")).grade == StudentGrade.junior_high
 
-    # Mentors never carry grade / guardians even if the CSV supplies them.
+    # Mentors never carry grade / guardians / graduation_year even if the CSV supplies them.
     cyril = await _member(db, "Cyril Fox")
     assert cyril.grade is None
     assert cyril.parent_guardian_1 is None
+    assert cyril.graduation_year is None
+
+
+async def test_import_reports_invalid_graduation_year(client, db):
+    await _login(client)
+    csv_text = (
+        "role,name,graduation_year\n"
+        "student,Bad Year,twenty-twenty-five\n"
+        "student,Good Year,2026\n"
+    )
+    resp = await client.post("/admin/import", files=_csv_upload(csv_text))
+    assert resp.status_code == 200
+    assert await _member(db, "Bad Year") is None
+    assert (await _member(db, "Good Year")).graduation_year == 2026
 
 
 async def test_import_reports_unknown_grade(client, db):
