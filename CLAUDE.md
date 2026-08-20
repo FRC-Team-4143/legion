@@ -193,6 +193,31 @@ A background sweep (`scheduler.job_purge_challenge_dms` →
 bot's DM thread doesn't fill up and `auth_requests` stays bounded; the delete needs no
 scope beyond the `chat:write` the bot already uses to post/edit the DM.
 
+**Magic links (`GET /sso/link`) — how Slack-delivered links sign people in.** Slack's
+in-app browser uses ephemeral cookie storage, on iOS *and* Android, and cannot be
+detected server-side (it sends a stock mobile Safari UA — a UA-sniffing "bounce them to
+the real browser" attempt was tried and reverted). So `mw_sso` never survives from one
+Slack tap to the next, and every tap used to cost a fresh Approve/Deny push. Instead, a
+sibling app signs a token naming the member (`services/sso.make_link_token`, salt
+`mw-sso-link` — **deliberately distinct from the cookie's `mw-sso` salt** so the two can
+never be swapped) into the links it puts in DMs and ephemeral replies; `/sso/link`
+verifies it, **re-resolves the member live** (so archiving someone kills every link
+already sent to them), re-validates `return_to` through `allowed_return_to`, and mints
+the cookie. Reusable until `SSO_LINK_TTL` — **deliberately equal to `SSO_SESSION_TTL`
+(12h)**, since a link left in a shared computer's browser history must not outlive the
+session it created, or the next person at that machine can replay it the next day
+(there's a test pinning `sso_link_ttl <= sso_session_ttl`). Expiring is cheap: the route
+falls back to the normal sign-in page, carrying the original destination across via
+`expired_link_return_to` so the user still lands where they meant to. Reusable rather
+than single-use, since the
+same DM link gets tapped repeatedly and Slack's own link-unfurl fetcher would otherwise
+burn it before the human ever tapped. This is sound because Slack already authenticated
+the recipient of a DM/ephemeral reply; it is **only** valid for per-person channels, as
+a link is a bearer credential. The minted cookie is non-privileged by construction —
+`make_link_sso_token` emits `groups: []` plus `via: "link"`, and every app's admin gate
+(including `_require_groups` here) treats `via == "link"` as a step-up-to-real-sign-in
+rather than a 403 — so a leaked link can never reach any `/admin`.
+
 **One-tap variant for sibling apps (`POST /sso/challenge`, `GET /sso/pending/{nonce}`):**
 a caller that already knows *which* member it's dealing with (e.g. Munus resolving a
 Slack slash command's user id locally) skips the username form entirely —

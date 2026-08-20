@@ -22,6 +22,11 @@ DEVICE_COOKIE = "mw_device"
 DEVICE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year — a stable per-browser throttle key
 
 _sso_signer = URLSafeTimedSerializer(settings.sso_secret, salt="mw-sso")
+# Distinct salt from the cookie signer above — same secret, but the two token types must
+# never be interchangeable. Without the salt split, a magic-link token (which travels in
+# a URL, lands in browser history, and is readable by anyone who can see the Slack
+# message) would be a valid `mw_sso` cookie value, and vice versa.
+_link_signer = URLSafeTimedSerializer(settings.sso_secret, salt="mw-sso-link")
 
 
 def make_sso_token(member: Member) -> str:
@@ -53,9 +58,106 @@ def sso_identity(request: Request) -> Optional[dict]:
     return read_sso_token(request.cookies.get(SSO_COOKIE))
 
 
-def set_sso_cookie(response: Response, member: Member) -> None:
+# ── Magic links (Slack-delivered one-tap sign-in) ────────────────────────────────
+#
+# Slack's in-app browser (iOS *and* Android) uses ephemeral cookie storage: whatever
+# `mw_sso` we set is gone by the next time a Slack link is tapped. It also doesn't
+# identify itself — a capture from inside it returns a stock mobile Safari UA — so
+# there's no way to detect it server-side and route around it.
+#
+# So instead of relying on the cookie surviving, the link itself carries the identity.
+# Every one-tap link we send is delivered over a channel Slack has *already*
+# authenticated (a DM, or an ephemeral slash-command reply visible only to one user),
+# so the Approve/Deny push was re-proving something Slack had just told us — and doing
+# it circularly, bouncing a user who is already in Slack to a web page that tells them
+# to go back to Slack. A signed token removes that round trip entirely, and makes the
+# vanishing cookie a non-issue: every tap silently re-mints it.
+#
+# The token is deliberately minimal — it names a member and where to land, and nothing
+# else. All authority is re-resolved at redemption (`routers/sso.py`'s GET /sso/link),
+# so deactivating a member instantly invalidates every link already sent to them.
+
+def make_link_token(member_code: str, return_to: str) -> str:
+    """A signed magic-link token for `member_code`, landing on `return_to`.
+
+    Callers are the sibling apps (they hold the same `sso_secret`), which mint these
+    into Slack DMs and ephemeral replies. Reusable until it expires: the same DM link
+    gets tapped repeatedly precisely because the cookie keeps vanishing, and a
+    single-use token would also be burned by Slack's own link-unfurl fetcher before
+    the human ever taps it."""
+    return _link_signer.dumps({"member_code": member_code, "return_to": return_to})
+
+
+def read_link_token(token: Optional[str]) -> Optional[dict]:
+    """The verified payload of a magic-link token, or None if absent/invalid/expired.
+
+    Enforces `sso_link_ttl`, which is held equal to the cookie's own TTL so a link left
+    in a shared computer's browser history can't outlive the session it created."""
+    if not token:
+        return None
+    try:
+        return _link_signer.loads(token, max_age=settings.sso_link_ttl)
+    except (BadSignature, SignatureExpired, TypeError, ValueError):
+        return None
+
+
+def expired_link_return_to(token: Optional[str]) -> Optional[str]:
+    """Where an *expired* magic link was trying to send its holder, or None.
+
+    Purely a UX rescue: without it, tapping a stale link lands you on Legion's root
+    after signing in rather than the page you were actually trying to open. Grants no
+    authority — the caller still has to sign in normally, and the destination is put
+    through `allowed_return_to` like any other.
+
+    Only reads tokens whose **signature is still valid** and which failed on age alone;
+    a tampered token raises `BadSignature` before ever reaching here, so this cannot be
+    used to inject a redirect target."""
+    if not token:
+        return None
+    try:
+        _link_signer.loads(token, max_age=settings.sso_link_ttl)
+    except SignatureExpired as expired:
+        try:
+            payload = _link_signer.load_payload(expired.payload)
+        except (BadSignature, TypeError, ValueError):
+            return None
+        return payload.get("return_to") if isinstance(payload, dict) else None
+    except (BadSignature, TypeError, ValueError):
+        return None
+    return None  # not expired at all — nothing to rescue
+
+
+def make_link_sso_token(member: Member, via: str) -> str:
+    """Cookie claims for an identity that arrived by magic link.
+
+    Identical to `make_sso_token` except **`groups` is empty** and a `via` marker is
+    added. A magic link is a bearer credential — anyone who can read the Slack message
+    can redeem it — so it must not be able to reach any app's `/admin`. Emptying
+    `groups` makes that structural: every admin gate in every sibling app already
+    denies on an empty group set, so this holds even for a gate nobody remembered to
+    update. `via` then lets those gates tell "signed in weakly" apart from "not signed
+    in", and offer a step-up instead of a flat 403."""
+    return _sso_signer.dumps({
+        "member_code": member.member_code,
+        "username": member.username,
+        "name": member.name,
+        "role": member.role.value,
+        "team_number": member.team.number if member.team else None,
+        "groups": [],
+        "slack_user_id": member.slack_user_id,
+        "via": via,
+    })
+
+
+def set_sso_cookie(response: Response, member: Member, *, via: Optional[str] = None) -> None:
+    """Set the shared `mw_sso` cookie for `member`.
+
+    `via="link"` marks the identity as having come from a magic link rather than an
+    approved Slack push, and strips `groups` from the claims — see `make_link_token`
+    for why a link-borne identity must never carry admin authority."""
+    claims = make_sso_token(member) if via is None else make_link_sso_token(member, via)
     response.set_cookie(
-        SSO_COOKIE, make_sso_token(member),
+        SSO_COOKIE, claims,
         httponly=True, samesite="lax", secure=True, max_age=settings.sso_session_ttl,
         domain=settings.sso_cookie_domain or None,
     )
@@ -79,38 +181,6 @@ def set_device_cookie(response: Response, device_id: str) -> None:
         httponly=True, samesite="lax", secure=True, max_age=DEVICE_MAX_AGE,
         domain=settings.sso_cookie_domain or None,
     )
-
-
-# ── Slack in-app browser escape (Android) ────────────────────────────────────────
-#
-# Slack's Android in-app browser is a separate, effectively ephemeral WebView — unlike
-# Chrome Custom Tabs, it doesn't share cookie storage with the system browser, and
-# closing it back to Slack discards whatever it stored. That silently breaks mw_sso
-# reuse: the cookie set during one Slack-opened tab is gone by the next one, so a
-# member who already approved a sign-in gets a fresh Approve/Deny push every single
-# time (the "no repeated push" case `services/legion_auth.py`'s `/enter` is built
-# around never actually holds on Android Slack). The fix is to hand the very first
-# unauthenticated hit off to the real system browser before the cookie is even minted,
-# so the whole approve/poll/complete sequence — and the cookie it sets — lands
-# somewhere persistent.
-
-def is_slack_in_app_browser(user_agent: Optional[str]) -> bool:
-    """True for Slack's Android in-app browser, identified by its own UA token."""
-    ua = (user_agent or "").lower()
-    return "slack" in ua and "android" in ua
-
-
-def slack_escape_url(request: Request) -> str:
-    """An Android `intent://` URL that hands the current page off to the device's
-    default browser. No `package=` pin — that lets Android resolve it through
-    whatever the user's actual default browser is, rather than forcing Chrome.
-    Built from `settings.base_url` (not `request.url`'s scheme/host) since this app
-    isn't guaranteed to see forwarded proto/host correctly behind the reverse proxy."""
-    target = f"{settings.base_url}{request.url.path}"
-    if request.url.query:
-        target += f"?{request.url.query}"
-    scheme, rest = target.split("://", 1)
-    return f"intent://{rest}#Intent;scheme={scheme};S.browser_fallback_url={quote(target, safe='')};end"
 
 
 # ── Open-redirect guard ──────────────────────────────────────────────────────────

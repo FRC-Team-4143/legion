@@ -60,6 +60,17 @@ class Settings(BaseSettings):
     # polling tab.
     sso_api_challenge_ttl: int = 300  # 5 min
 
+    # How long a Slack magic link stays redeemable (GET /sso/link — see
+    # services/sso.make_link_token). A link is a bearer credential that lingers in Slack
+    # history, browser history, and reverse-proxy access logs, so this is the main dial
+    # on that exposure. Deliberately kept equal to `sso_session_ttl` above: on a shared
+    # computer (a school lab machine), the link sitting in browser history must not
+    # outlive the session it creates — otherwise the next person to sit down the
+    # following day can replay it from history and sign in as that member long after
+    # the cookie itself expired. Expiring is cheap: `/sso/link` falls through to the
+    # normal sign-in page, and a fresh link is one slash command away.
+    sso_link_ttl: int = 60 * 60 * 12  # 12 hours — keep in step with sso_session_ttl
+
     # Auto-delete the Approve/Deny challenge DMs (and their AuthRequest rows) once
     # they're this old, so a member's DM thread with the auth bot doesn't fill up
     # with stale sign-in prompts. 15 min is well past the max challenge TTL above,

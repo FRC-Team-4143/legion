@@ -147,6 +147,15 @@ def _require_groups(request: Request, groups: set[str]):
     if identity is not None:
         if groups & set(identity.get("groups") or []) or _is_authenticated(request):
             return None
+        # A magic-link identity (services/sso.make_link_sso_token) carries no groups by
+        # construction, so it would already fail the check above — but send it back for
+        # a real sign-in rather than showing "No Access", since the person may well be
+        # an admin who simply arrived via a Slack link. A flat 403 would strand them.
+        if identity.get("via") == "link" and not _is_authenticated(request):
+            return_to = quote(str(request.url.path), safe="")
+            return RedirectResponse(
+                f"/sso/authorize?app=legion&return_to={return_to}", status_code=303
+            )
         return _forbidden(request, _section_label(request.url.path))
     if _is_authenticated(request):
         return None

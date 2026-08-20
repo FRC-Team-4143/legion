@@ -33,8 +33,8 @@ from app.models import AuthRequest, AuthStatus, Member
 from app.routers.api import require_api_key
 from app.services import slack_auth, throttle
 from app.services.sso import (
-    allowed_return_to, clear_sso_cookie, get_device_id, is_slack_in_app_browser,
-    set_device_cookie, set_sso_cookie, slack_escape_url, sso_identity,
+    allowed_return_to, clear_sso_cookie, expired_link_return_to, get_device_id,
+    read_link_token, set_device_cookie, set_sso_cookie, sso_identity,
 )
 
 router = APIRouter(prefix="/sso")
@@ -45,18 +45,6 @@ _NONCE_BYTES = 24
 
 def _client_ip(request: Request) -> Optional[str]:
     return request.client.host if request.client else None
-
-
-def _slack_escape_response(request: Request) -> Optional[HTMLResponse]:
-    """An interstitial that bounces Slack's Android in-app browser out to the system
-    browser, or None if this request isn't coming from it. Call before minting any
-    cookie or Slack push — see `services.sso`'s "Slack in-app browser escape" section
-    for why."""
-    if not is_slack_in_app_browser(request.headers.get("user-agent")):
-        return None
-    return templates.TemplateResponse(
-        "sso/escape.html", {"request": request, "escape_url": slack_escape_url(request)}
-    )
 
 
 def _append_state(target: str, state: str) -> str:
@@ -102,10 +90,6 @@ async def sso_authorize_get(request: Request, app: str = "", return_to: str = "/
     # Already signed in — real SSO, no prompt needed.
     if sso_identity(request):
         return RedirectResponse(_append_state(target, state), status_code=303)
-
-    escape = _slack_escape_response(request)
-    if escape is not None:
-        return escape
 
     response = templates.TemplateResponse(
         "sso/login.html",
@@ -232,10 +216,6 @@ async def sso_pending(nonce: str, request: Request, db: AsyncSession = Depends(g
     """Public landing page for a challenge started via POST /sso/challenge — the same
     "check Slack" polling page GET/POST /sso/authorize renders, just addressable by
     nonce alone since there's no form submission to render it from here."""
-    escape = _slack_escape_response(request)
-    if escape is not None:
-        return escape
-
     auth_request = (
         await db.execute(select(AuthRequest).where(AuthRequest.nonce == nonce))
     ).scalars().first()
@@ -246,6 +226,61 @@ async def sso_pending(nonce: str, request: Request, db: AsyncSession = Depends(g
     return templates.TemplateResponse(
         "sso/pending.html", {"request": request, "nonce": nonce, "challenge_ttl": remaining}
     )
+
+
+@router.get("/link", response_class=HTMLResponse)
+async def sso_link(request: Request, token: str = "", db: AsyncSession = Depends(get_db)):
+    """Redeem a Slack magic link: verify the signed token, mint `mw_sso`, and land the
+    caller on the token's `return_to`. No Slack round trip and no username form.
+
+    This exists because Slack's in-app browser throws away cookies between opens (on
+    both platforms, and it can't be detected server-side), which made every Slack tap
+    cost a full Approve/Deny cycle. The links we send all travel over channels Slack has
+    already authenticated — a DM, or an ephemeral reply only one user can see — so the
+    token is trusted on that basis. See `services/sso.make_link_token` for the reasoning
+    and the bearer-credential tradeoff.
+
+    Everything that grants authority is re-checked here rather than trusted from the
+    token, so a link can't outlive the member's access: archiving someone kills every
+    link already sitting in their DMs. The resulting cookie is deliberately
+    non-privileged (`groups: []`, `via: "link"`) — `make_link_sso_token` explains why.
+    """
+    payload = read_link_token(token)
+    member = None
+    if payload is not None:
+        member = (
+            await db.execute(
+                select(Member)
+                .options(selectinload(Member.team), selectinload(Member.groups))
+                .where(
+                    Member.member_code == payload.get("member_code"),
+                    Member.is_active.is_(True),
+                )
+            )
+        ).scalars().first()
+
+    if member is None:
+        # Same treatment as a dead /sso/complete nonce — fall back to the normal sign-in
+        # form rather than dead-ending, so an expired link is still a route to getting in.
+        # Carry the original destination across where we can (`expired_link_return_to`
+        # recovers it from a still-signature-valid but aged token), so signing in lands
+        # them on the page they tapped for instead of Legion's root.
+        return templates.TemplateResponse(
+            "sso/login.html",
+            {
+                "request": request, "app": "", "state": "",
+                "return_to": allowed_return_to(expired_link_return_to(token)) or "/",
+                "error": "This sign-in link has expired. Please sign in below.",
+            },
+            status_code=400,
+        )
+
+    # Re-validate the destination even though it was signed — a signature proves the
+    # URL came from us, not that it's still an allowed redirect target.
+    target = allowed_return_to(payload.get("return_to")) or "/"
+    response = RedirectResponse(target, status_code=303)
+    set_sso_cookie(response, member, via="link")
+    return response
 
 
 @router.get("/status/{nonce}")

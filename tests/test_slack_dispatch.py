@@ -35,6 +35,9 @@ def test_routes_munus_action_ids():
     for action_id in (
         "hours_quick", "hours_adjust", "review_edit",
         "submission_approve", "submission_reject",
+        # The announcement "View & sign up" button. Unrouted actions are swallowed with
+        # a 200, so a missing entry here makes the button silently do nothing.
+        "opportunity_view",
     ):
         assert resolve_target(_block_action(action_id)) == settings.munus_interact_url
 
