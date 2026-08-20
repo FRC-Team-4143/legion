@@ -88,7 +88,7 @@ async def test_import_grade_and_guardians(client, db):
         "role,name,grade,parent_guardian_1,parent_guardian_2,graduation_year\n"
         "student,Ada Byron,Sophomore,U03ANNE01,U03GEO001,2028\n"  # label form
         "student,Bea Green,junior_high,,,\n"                       # enum-value form
-        "mentor,Cyril Fox,Senior,U03IGNORE,,2025\n"                # grade/parent/year ignored for mentors
+        "mentor,Cyril Fox,Senior,U03IGNORE,,2025\n"                # guardian ignored, grade/year kept
     )
     resp = await client.post("/admin/import", files=_csv_upload(csv_text))
     assert resp.status_code == 200
@@ -101,11 +101,13 @@ async def test_import_grade_and_guardians(client, db):
 
     assert (await _member(db, "Bea Green")).grade == StudentGrade.junior_high
 
-    # Mentors never carry grade / guardians / graduation_year even if the CSV supplies them.
+    # Guardians are still cleared for mentors, but grade/graduation_year are not — a
+    # mentor row can be a past alumnus (e.g. a returning student now mentoring), so the
+    # CSV can carry their grade/graduation history.
     cyril = await _member(db, "Cyril Fox")
-    assert cyril.grade is None
+    assert cyril.grade == StudentGrade.senior
     assert cyril.parent_guardian_1 is None
-    assert cyril.graduation_year is None
+    assert cyril.graduation_year == 2025
 
 
 async def test_import_reports_invalid_graduation_year(client, db):

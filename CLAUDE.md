@@ -127,10 +127,18 @@ link and is **unique when set**.
 ### Members are unified
 Students and mentors are one `members` table discriminated by `role` (`MemberRole`).
 Team and focus group are nullable FKs. `grade` (`StudentGrade` enum), `parent_guardian_1/2`,
-and `graduation_year` are student-only — they live on every row but app logic gates them
-to the right role (clears them for mentors). `parent_guardian_1/2` hold the guardian's
-own Slack user ID (e.g. `U01ABC123`), not their name — see "Slack profile sync" below for
-why. There is no mentor "lead" flag (removed —
+and `graduation_year` live on every row but app logic gates them to the right role.
+`parent_guardian_1/2` are strictly student-only — cleared the moment a member's role
+becomes mentor (in the create/edit routes and CSV import) — and hold the guardian's own
+Slack user ID (e.g. `U01ABC123`), not their name; see "Slack profile sync" below for why.
+`grade` and `graduation_year`, by contrast, are **not** cleared on a student->mentor role
+switch: a former student who becomes a mentor (a common FRC pattern — alumni returning to
+mentor) keeps their grade/graduation history rather than losing it the instant their role
+flips. They're also directly settable on a mentor row (form or CSV) for the same reason —
+e.g. backfilling a longtime mentor who's also a program alum. The member detail modal
+(`templates/admin/members.html`) shows Grade/Graduation Year for a mentor only when
+actually set, so an ordinary mentor's card isn't cluttered with empty rows. There is no
+mentor "lead" flag (removed —
 Tempus has its own `is_lead` for escalation DMs, but it's local to Tempus's own Mentor
 table, not synced from Legion). Soft-delete via `is_active` + `archived_at`, matching the
 siblings. The **Yearly Grade

@@ -77,8 +77,11 @@ container port 8002. See that repo's `docker-compose.yml` and `deploy.sh`.
 
 Students carry a **Grade** (Junior High → Freshman → Sophomore → Junior → Senior →
 Alumni) and up to two **Parent/Guardian** Slack user IDs (the guardian's own Slack
-account, not their name). Grade + guardians are student-only — they're ignored for
-mentors. Guardian IDs are **not** exposed on the read API; `grade` is (as `grade`). The
+account, not their name). Guardians are student-only — cleared the moment someone's role
+becomes mentor. **Grade** and **Graduation Year** are not: a former student who becomes a
+mentor keeps them, so a returning alumnus who's now mentoring still shows their grade
+history instead of losing it on the role switch. Guardian IDs are **not** exposed on the
+read API; `grade` and `graduation_year` are. The
 Members page has a **Yearly Grade Increase** button that advances every active student
 one grade; seniors graduate to **Alumni**, are archived, and have **Graduation Year**
 set to the current calendar year. Graduation year is *not* auto-backfilled for alumni
@@ -101,10 +104,11 @@ for students. Configure `SLACK_BOT_TOKEN` (blank = sync disabled).
 
 Columns: `role` (student|mentor, required), `name` (required), `team_number` (optional,
 must be an existing team), `subteam` (optional, a subteam slug), `slack_user_id`
-(optional, unique), `grade` (optional, students only —
-a grade name like `Sophomore`), `parent_guardian_1` / `parent_guardian_2` (optional,
+(optional, unique), `grade` (optional —
+a grade name like `Sophomore`; also settable on a mentor row, see "Student metadata"
+above), `parent_guardian_1` / `parent_guardian_2` (optional,
 students only — the guardian's Slack `U...` ID, not their name), `graduation_year`
-(optional, students only — a 4-digit year). Existing members are
+(optional — a 4-digit year; also settable on a mentor row). Existing members are
 matched by name (case-insensitive) and updated; new
 members get a fresh `member_code` and `username`. Group membership is deliberately not
 importable — granting admin access (any group) always goes through the edit form, so a

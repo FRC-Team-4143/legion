@@ -138,9 +138,14 @@
                 <dt class="col-sm-4">Role</dt><dd class="col-sm-8">{{ m.role | rolelabel }}</dd>
                 <dt class="col-sm-4">Team</dt><dd class="col-sm-8">{{ m.team.number ~ ' · ' ~ m.team.name if m.team else '—' }}</dd>
                 <dt class="col-sm-4">Subteam</dt><dd class="col-sm-8">{{ m.subteam.label if m.subteam else '—' }}</dd>
-                {% if m.role.value == 'student' %}
+                {# Grade/graduation year survive a student->mentor role switch (a past
+                   alumnus who's now mentoring), so show them for a mentor too if set —
+                   but don't clutter every ordinary mentor's modal with an empty row. #}
+                {% if m.role.value == 'student' or m.grade %}
                 <dt class="col-sm-4">Grade</dt><dd class="col-sm-8">{{ m.grade | gradelabel }}</dd>
                 <dt class="col-sm-4">Graduation Year</dt><dd class="col-sm-8">{{ m.graduation_year or '—' }}</dd>
+                {% endif %}
+                {% if m.role.value == 'student' %}
                 <dt class="col-sm-4">Parent / Guardian 1</dt><dd class="col-sm-8">{% if m.parent_guardian_1 %}<code class="text-muted">{{ m.parent_guardian_1 }}</code>{% else %}—{% endif %}</dd>
                 <dt class="col-sm-4">Parent / Guardian 2</dt><dd class="col-sm-8">{% if m.parent_guardian_2 %}<code class="text-muted">{{ m.parent_guardian_2 }}</code>{% else %}—{% endif %}</dd>
                 {% endif %}
@@ -208,7 +213,7 @@
             <input name="slack_user_id" class="form-control" placeholder="U01ABC...">
           </div>
           <div class="mb-3">
-            <label class="form-label">Grade <small class="text-muted">(students only)</small></label>
+            <label class="form-label">Grade <small class="text-muted">(students; also kept for mentors who are past alumni)</small></label>
             <select name="grade" class="form-select">
               <option value="">—</option>
               {% for g in grades %}<option value="{{ g.value }}">{{ g | gradelabel }}</option>{% endfor %}
@@ -223,7 +228,7 @@
             <input name="parent_guardian_2" class="form-control" maxlength="200" placeholder="U01ABC...">
           </div>
           <div class="mb-3">
-            <label class="form-label">Graduation Year <small class="text-muted">(students only)</small></label>
+            <label class="form-label">Graduation Year <small class="text-muted">(students; also kept for mentors who are past alumni)</small></label>
             <input type="number" name="graduation_year" class="form-control" min="1900" max="2200" placeholder="2027">
           </div>
         </div>
