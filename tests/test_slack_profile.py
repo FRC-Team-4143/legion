@@ -23,15 +23,15 @@ async def test_build_profile_fields_student(db, make_member):
     await make_member(
         name="Student One", role=MemberRole.student, team_number=4143,
         subteam_slug="software", grade=StudentGrade.sophomore,
-        parent_guardian_1="Parent A", parent_guardian_2="Parent B",
+        parent_guardian_1="U03PAR001", parent_guardian_2="U03PAR002",
     )
     fields = build_profile_fields(await _loaded(db, "Student One"))
 
     assert fields[FIELD_TEAM]["value"] == "4143 - MARS/WARS"
     assert fields[FIELD_SCHOOL_YEAR]["value"] == "Sophomore"  # label, not enum value
     assert fields[FIELD_SUBTEAM]["value"] == "Software"
-    assert fields[FIELD_PARENT_1]["value"] == "Parent A"
-    assert fields[FIELD_PARENT_2]["value"] == "Parent B"
+    assert fields[FIELD_PARENT_1]["value"] == "U03PAR001"
+    assert fields[FIELD_PARENT_2]["value"] == "U03PAR002"
 
 
 async def test_build_profile_fields_omits_guardians_for_mentor(db, make_member):

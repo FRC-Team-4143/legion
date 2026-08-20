@@ -206,6 +206,8 @@ class Member(Base):
     grade: Mapped[Optional[StudentGrade]] = mapped_column(
         SAEnum(StudentGrade), nullable=True
     )
+    # The guardian's own Slack user ID (e.g. "U01ABC123"), not their name — Slack renders
+    # it as a linked profile in the custom profile field it's pushed into (slack_profile.py).
     parent_guardian_1: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     parent_guardian_2: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
 

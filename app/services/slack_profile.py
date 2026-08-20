@@ -1,6 +1,8 @@
 """
 Slack profile sync — pushes each member's roster metadata into their Slack *custom
-profile fields* (Team, School Year, Subteam, Parent/Guardian 1 & 2).
+profile fields* (Team, School Year, Subteam, Parent/Guardian 1 & 2 — the guardian
+fields are the guardian's own Slack user ID, so Slack renders them as linked profiles
+rather than plain text).
 
 Legion is the source of truth, so this is a one-way push out to Slack: manual-only,
 triggered by an admin button (`POST /admin/members/sync-slack`) which calls
@@ -44,7 +46,9 @@ def build_profile_fields(member: Member) -> dict:
     """Map a member onto the Slack custom-profile `fields` payload. Requires `team` and
     `subteam` to be loaded. Team / school year / subteam are sent for everyone
     (empty string clears a stale value); Parent/Guardian fields are sent for students
-    only — mentors never have guardians, so those field IDs are omitted entirely."""
+    only — mentors never have guardians, so those field IDs are omitted entirely.
+    `parent_guardian_1/2` hold the guardian's own Slack user ID, sent as-is — Slack's
+    "person" custom field type renders a raw user ID as a linked profile."""
     fields: dict[str, dict] = {
         FIELD_TEAM: {"value": f"{member.team.number} - {member.team.name}" if member.team else ""},
         FIELD_SCHOOL_YEAR: {"value": grade_label(member.grade) if member.grade else ""},

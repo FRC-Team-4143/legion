@@ -91,7 +91,7 @@ async def test_member_without_team_or_focus_serializes_null(db, make_member):
 async def test_serialize_member_exposes_grade_but_not_guardians(db, make_member):
     await make_member(
         name="Gale Boetticher", role=MemberRole.student, grade=StudentGrade.junior,
-        parent_guardian_1="Pat Boetticher", parent_guardian_2="Sam Boetticher",
+        parent_guardian_1="U03PAT001", parent_guardian_2="U03SAM001",
     )
     data = serialize_member(await _loaded(db, "Gale Boetticher"))
     # School year is on the wire...

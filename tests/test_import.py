@@ -86,17 +86,17 @@ async def test_import_grade_and_guardians(client, db):
     await _login(client)
     csv_text = (
         "role,name,grade,parent_guardian_1,parent_guardian_2\n"
-        "student,Ada Byron,Sophomore,Anne Byron,George Byron\n"   # label form
+        "student,Ada Byron,Sophomore,U03ANNE01,U03GEO001\n"       # label form
         "student,Bea Green,junior_high,,\n"                        # enum-value form
-        "mentor,Cyril Fox,Senior,Ignored Parent,\n"               # grade/parent ignored for mentors
+        "mentor,Cyril Fox,Senior,U03IGNORE,\n"                    # grade/parent ignored for mentors
     )
     resp = await client.post("/admin/import", files=_csv_upload(csv_text))
     assert resp.status_code == 200
 
     ada = await _member(db, "Ada Byron")
     assert ada.grade == StudentGrade.sophomore
-    assert ada.parent_guardian_1 == "Anne Byron"
-    assert ada.parent_guardian_2 == "George Byron"
+    assert ada.parent_guardian_1 == "U03ANNE01"
+    assert ada.parent_guardian_2 == "U03GEO001"
 
     assert (await _member(db, "Bea Green")).grade == StudentGrade.junior_high
 

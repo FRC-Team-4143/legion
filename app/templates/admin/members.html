@@ -140,8 +140,8 @@
                 <dt class="col-sm-4">Subteam</dt><dd class="col-sm-8">{{ m.subteam.label if m.subteam else '—' }}</dd>
                 {% if m.role.value == 'student' %}
                 <dt class="col-sm-4">Grade</dt><dd class="col-sm-8">{{ m.grade | gradelabel }}</dd>
-                <dt class="col-sm-4">Parent / Guardian 1</dt><dd class="col-sm-8">{{ m.parent_guardian_1 or '—' }}</dd>
-                <dt class="col-sm-4">Parent / Guardian 2</dt><dd class="col-sm-8">{{ m.parent_guardian_2 or '—' }}</dd>
+                <dt class="col-sm-4">Parent / Guardian 1</dt><dd class="col-sm-8">{% if m.parent_guardian_1 %}<code class="text-muted">{{ m.parent_guardian_1 }}</code>{% else %}—{% endif %}</dd>
+                <dt class="col-sm-4">Parent / Guardian 2</dt><dd class="col-sm-8">{% if m.parent_guardian_2 %}<code class="text-muted">{{ m.parent_guardian_2 }}</code>{% else %}—{% endif %}</dd>
                 {% endif %}
                 <dt class="col-sm-4">Groups</dt>
                 <dd class="col-sm-8">
@@ -214,12 +214,12 @@
             </select>
           </div>
           <div class="mb-3">
-            <label class="form-label">Parent / Guardian 1 <small class="text-muted">(students only)</small></label>
-            <input name="parent_guardian_1" class="form-control" maxlength="200">
+            <label class="form-label">Parent / Guardian 1 Slack ID <small class="text-muted">(students only)</small></label>
+            <input name="parent_guardian_1" class="form-control" maxlength="200" placeholder="U01ABC...">
           </div>
           <div class="mb-3">
-            <label class="form-label">Parent / Guardian 2 <small class="text-muted">(students only)</small></label>
-            <input name="parent_guardian_2" class="form-control" maxlength="200">
+            <label class="form-label">Parent / Guardian 2 Slack ID <small class="text-muted">(students only)</small></label>
+            <input name="parent_guardian_2" class="form-control" maxlength="200" placeholder="U01ABC...">
           </div>
         </div>
         <div class="modal-footer">
