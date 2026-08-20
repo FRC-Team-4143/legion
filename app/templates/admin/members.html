@@ -43,11 +43,11 @@
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <h2 class="mb-0">Members</h2>
   <div class="d-flex gap-2 flex-wrap">
-    {% if show_archived %}
-    <a href="/admin/members" class="btn btn-outline-secondary btn-sm"><i class="bi bi-eye-slash me-1"></i> Hide Archived</a>
-    {% else %}
-    <a href="/admin/members?show_archived=1" class="btn btn-outline-secondary btn-sm"><i class="bi bi-archive me-1"></i> Show Archived</a>
-    {% endif %}
+    <div class="btn-group btn-group-sm" role="group">
+      <a href="/admin/members" class="btn {% if status == 'active' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">Active</a>
+      <a href="/admin/members?status=archived" class="btn {% if status == 'archived' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">Archived</a>
+      <a href="/admin/members?status=all" class="btn {% if status == 'all' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">All</a>
+    </div>
     <form method="post" action="/admin/members/bump-grades" class="d-inline"
           onsubmit="return confirm('Advance every active student one grade? Seniors graduate to Alumni and are archived.')">
       <button class="btn btn-outline-warning btn-sm"><i class="bi bi-arrow-up-circle me-1"></i> Yearly Grade Increase</button>
@@ -88,6 +88,9 @@
           <th class="fs-th" data-col="grade" data-sortable="true" data-sort-type="num">
             <span class="th-inner d-inline-flex align-items-center"><span class="th-label">Grade</span></span>
           </th>
+          <th class="fs-th" data-col="graduation_year" data-sortable="true" data-sort-type="num">
+            <span class="th-inner d-inline-flex align-items-center"><span class="th-label">Graduation Year</span></span>
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -101,6 +104,7 @@
           <td data-value="{{ m.team.number if m.team else '' }}">{{ m.team.number if m.team else '—' }}</td>
           <td data-value="{{ m.subteam.label if m.subteam else '' }}">{{ m.subteam.label if m.subteam else '—' }}</td>
           <td data-value="{{ m.grade | graderank if m.grade else '' }}" data-label="{{ m.grade | gradelabel if m.grade else '' }}">{{ m.grade | gradelabel if m.grade else '—' }}</td>
+          <td data-value="{{ m.graduation_year or '' }}">{{ m.graduation_year or '—' }}</td>
         </tr>
         <div class="modal fade" id="memberDetail{{ m.id }}" tabindex="-1">
           <div class="modal-dialog"><div class="modal-content">
@@ -165,7 +169,7 @@
           </div></div>
         </div>
         {% else %}
-        <tr><td colspan="5" class="text-center text-muted py-4">No members yet. Add one or import a CSV.</td></tr>
+        <tr><td colspan="6" class="text-center text-muted py-4">No members yet. Add one or import a CSV.</td></tr>
         {% endfor %}
       </tbody>
     </table>
