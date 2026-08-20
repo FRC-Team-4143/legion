@@ -126,15 +126,29 @@ link and is **unique when set**.
 
 ### Members are unified
 Students and mentors are one `members` table discriminated by `role` (`MemberRole`).
-Team and focus group are nullable FKs. `grade` (`StudentGrade` enum) and
-`parent_guardian_1/2` are student-only — they live on every row but app logic gates them
-to the right role (clears them for mentors). There is no mentor "lead" flag (removed —
+Team and focus group are nullable FKs. `grade` (`StudentGrade` enum), `parent_guardian_1/2`,
+and `graduation_year` live on every row but app logic gates them to the right role.
+`parent_guardian_1/2` are strictly student-only — cleared the moment a member's role
+becomes mentor (in the create/edit routes and CSV import) — and hold the guardian's own
+Slack user ID (e.g. `U01ABC123`), not their name; see "Slack profile sync" below for why.
+`grade` and `graduation_year`, by contrast, are **not** cleared on a student->mentor role
+switch: a former student who becomes a mentor (a common FRC pattern — alumni returning to
+mentor) keeps their grade/graduation history rather than losing it the instant their role
+flips. They're also directly settable on a mentor row (form or CSV) for the same reason —
+e.g. backfilling a longtime mentor who's also a program alum. The member detail modal
+(`templates/admin/members.html`) shows Grade/Graduation Year for a mentor only when
+actually set, so an ordinary mentor's card isn't cluttered with empty rows. There is no
+mentor "lead" flag (removed —
 Tempus has its own `is_lead` for escalation DMs, but it's local to Tempus's own Mentor
 table, not synced from Legion). Soft-delete via `is_active` + `archived_at`, matching the
 siblings. The **Yearly Grade
 Increase** admin action (`/admin/members/bump-grades`) walks `GRADE_ORDER`; a senior
-graduates to `alumni` and is archived. `grade` is exposed on the read API; guardian
-names are deliberately **not** (PII, and no consumer needs them).
+graduates to `alumni`, is archived, and gets `graduation_year` set to the current
+calendar year — deliberately **not** auto-backfilled for alumni who graduated before
+this field existed (no reliable record of when past bumps ran), though an admin can
+enter it by hand via the edit form or CSV import. `grade` and `graduation_year` are
+exposed on the read API; guardian IDs are deliberately **not** (PII, and no consumer
+needs them).
 
 ### Subteams & teams are data, not enums
 `subteams` and `teams` are admin-editable tables (unlike Tempus's hardcoded
@@ -296,7 +310,9 @@ model and picked up by `create_all()`.
 
 ### Slack profile sync (`services/slack_profile.py`)
 One-way push of member metadata into Slack **custom profile fields** (Team, School Year,
-Focus Group, Parent/Guardian 1 & 2 — guardians for students only). Mirrors the siblings'
+Focus Group, Parent/Guardian 1 & 2 — guardians for students only). The guardian fields
+carry the guardian's own Slack user ID rather than a name, sent as-is into a Slack
+"person" custom field so it renders as a linked profile. Mirrors the siblings'
 cached `AsyncWebClient` + swallow-and-log pattern. Manual-only — triggered solely by the
 `/admin/members/sync-slack` button, no scheduled job. Gated on `slack_bot_token`. Field
 IDs are constants in the service. Requires an **admin user token** (`xoxp-…`) — a bot

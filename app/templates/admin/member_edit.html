@@ -51,19 +51,23 @@
         <input name="slack_user_id" class="form-control" value="{{ member.slack_user_id or '' }}" placeholder="U01ABC...">
       </div>
       <div class="mb-3">
-        <label class="form-label">Grade <small class="text-muted">(students only)</small></label>
+        <label class="form-label">Grade <small class="text-muted">(students; also kept for mentors who are past alumni)</small></label>
         <select name="grade" class="form-select">
           <option value="">—</option>
           {% for g in grades %}<option value="{{ g.value }}" {% if member.grade == g %}selected{% endif %}>{{ g | gradelabel }}</option>{% endfor %}
         </select>
       </div>
       <div class="mb-3">
-        <label class="form-label">Parent / Guardian 1 <small class="text-muted">(students only)</small></label>
-        <input name="parent_guardian_1" class="form-control" maxlength="200" value="{{ member.parent_guardian_1 or '' }}">
+        <label class="form-label">Parent / Guardian 1 Slack ID <small class="text-muted">(students only)</small></label>
+        <input name="parent_guardian_1" class="form-control" maxlength="200" value="{{ member.parent_guardian_1 or '' }}" placeholder="U01ABC...">
       </div>
       <div class="mb-3">
-        <label class="form-label">Parent / Guardian 2 <small class="text-muted">(students only)</small></label>
-        <input name="parent_guardian_2" class="form-control" maxlength="200" value="{{ member.parent_guardian_2 or '' }}">
+        <label class="form-label">Parent / Guardian 2 Slack ID <small class="text-muted">(students only)</small></label>
+        <input name="parent_guardian_2" class="form-control" maxlength="200" value="{{ member.parent_guardian_2 or '' }}" placeholder="U01ABC...">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Graduation Year <small class="text-muted">(auto-set when a senior is bumped to alumni, kept if they later become a mentor; edit to backfill historic records)</small></label>
+        <input type="number" name="graduation_year" class="form-control" min="1900" max="2200" value="{{ member.graduation_year or '' }}" placeholder="2027">
       </div>
       <p class="text-muted small">Group membership is managed from <a href="/admin/groups">User Groups</a>, not here.</p>
       <button type="submit" class="btn btn-primary">Save</button>

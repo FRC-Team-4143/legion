@@ -88,50 +88,84 @@
           <th class="fs-th" data-col="grade" data-sortable="true" data-sort-type="num">
             <span class="th-inner d-inline-flex align-items-center"><span class="th-label">Grade</span></span>
           </th>
-          <th>Slack UID</th>
-          <th>Username</th>
-          <th>Member Code</th>
-          <th></th>
         </tr>
       </thead>
       <tbody>
         {% for m in members %}
         <tr {% if not m.is_active %}class="table-secondary"{% endif %}>
-          <td data-value="{{ m.name }}">{{ m.name }}{% if not m.is_active %}<span class="badge bg-secondary ms-1">Archived</span>{% endif %}</td>
+          <td data-value="{{ m.name }}">
+            <button type="button" class="btn btn-link p-0 text-start" data-bs-toggle="modal" data-bs-target="#memberDetail{{ m.id }}">{{ m.name }}</button>
+            {% if not m.is_active %}<span class="badge bg-secondary ms-1">Archived</span>{% endif %}
+          </td>
           <td data-value="{{ m.role.value }}" data-label="{{ m.role | rolelabel }}">{{ m.role | rolelabel }}</td>
           <td data-value="{{ m.team.number if m.team else '' }}">{{ m.team.number if m.team else '—' }}</td>
           <td data-value="{{ m.subteam.label if m.subteam else '' }}">{{ m.subteam.label if m.subteam else '—' }}</td>
           <td data-value="{{ m.grade | graderank if m.grade else '' }}" data-label="{{ m.grade | gradelabel if m.grade else '' }}">{{ m.grade | gradelabel if m.grade else '—' }}</td>
-          <td>{{ m.slack_user_id or '—' }}</td>
-          <td><code class="text-muted">{{ m.username }}</code></td>
-          <td><code class="text-muted">{{ m.member_code }}</code></td>
-          <td class="text-end">
-            {% if m.is_active %}
-              <a href="/admin/members/{{ m.id }}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
-              {% if manager_locked(request) and is_privileged_member(m) %}
-                <button class="btn btn-sm btn-outline-danger" disabled title="Managers can't archive other managers or admins">Archive</button>
-              {% else %}
-              <form method="post" action="/admin/members/{{ m.id }}/delete" class="d-inline"
-                    onsubmit="return confirm('Archive {{ m.name }}? Their record and member code are kept.')">
-                <button class="btn btn-sm btn-outline-danger">Archive</button>
-              </form>
-              {% endif %}
-            {% elif manager_locked(request) %}
-              <button class="btn btn-sm btn-outline-success" disabled title="Managers can't restore members">Restore</button>
-              <button class="btn btn-sm btn-outline-danger" disabled title="Managers can't permanently delete members"><i class="bi bi-trash"></i></button>
-            {% else %}
-              <form method="post" action="/admin/members/{{ m.id }}/restore" class="d-inline">
-                <button class="btn btn-sm btn-outline-success">Restore</button>
-              </form>
-              <form method="post" action="/admin/members/{{ m.id }}/purge" class="d-inline"
-                    onsubmit="return confirm('Permanently delete {{ m.name }}? This cannot be undone.')">
-                <button class="btn btn-sm btn-outline-danger" title="Delete permanently"><i class="bi bi-trash"></i></button>
-              </form>
-            {% endif %}
-          </td>
         </tr>
+        <div class="modal fade" id="memberDetail{{ m.id }}" tabindex="-1">
+          <div class="modal-dialog"><div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">{{ m.name }}{% if not m.is_active %} <span class="badge bg-secondary">Archived</span>{% endif %}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <dl class="row mb-0">
+                <dt class="col-sm-4">Role</dt><dd class="col-sm-8">{{ m.role | rolelabel }}</dd>
+                <dt class="col-sm-4">Team</dt><dd class="col-sm-8">{{ m.team.number ~ ' · ' ~ m.team.name if m.team else '—' }}</dd>
+                <dt class="col-sm-4">Subteam</dt><dd class="col-sm-8">{{ m.subteam.label if m.subteam else '—' }}</dd>
+                {# Grade/graduation year survive a student->mentor role switch (a past
+                   alumnus who's now mentoring), so show them for a mentor too if set —
+                   but don't clutter every ordinary mentor's modal with an empty row. #}
+                {% if m.role.value == 'student' or m.grade %}
+                <dt class="col-sm-4">Grade</dt><dd class="col-sm-8">{{ m.grade | gradelabel }}</dd>
+                <dt class="col-sm-4">Graduation Year</dt><dd class="col-sm-8">{{ m.graduation_year or '—' }}</dd>
+                {% endif %}
+                {% if m.role.value == 'student' %}
+                <dt class="col-sm-4">Parent / Guardian 1</dt><dd class="col-sm-8">{% if m.parent_guardian_1 %}<code class="text-muted">{{ m.parent_guardian_1 }}</code>{% else %}—{% endif %}</dd>
+                <dt class="col-sm-4">Parent / Guardian 2</dt><dd class="col-sm-8">{% if m.parent_guardian_2 %}<code class="text-muted">{{ m.parent_guardian_2 }}</code>{% else %}—{% endif %}</dd>
+                {% endif %}
+                <dt class="col-sm-4">Groups</dt>
+                <dd class="col-sm-8">
+                  {% for g in m.groups %}<span class="badge bg-secondary me-1">{{ g.label }}</span>{% else %}—{% endfor %}
+                </dd>
+                <dt class="col-sm-4">Slack UID</dt><dd class="col-sm-8">{% if m.slack_user_id %}<code class="text-muted">{{ m.slack_user_id }}</code>{% else %}—{% endif %}</dd>
+                <dt class="col-sm-4">Username</dt><dd class="col-sm-8"><code class="text-muted">{{ m.username }}</code></dd>
+                <dt class="col-sm-4">Member Code</dt><dd class="col-sm-8"><code class="text-muted">{{ m.member_code }}</code></dd>
+                <dt class="col-sm-4">Created</dt><dd class="col-sm-8">{{ m.created_at | localdt }}</dd>
+                <dt class="col-sm-4">Updated</dt><dd class="col-sm-8">{{ m.updated_at | localdt }}</dd>
+                {% if m.archived_at %}
+                <dt class="col-sm-4">Archived</dt><dd class="col-sm-8">{{ m.archived_at | localdt }}</dd>
+                {% endif %}
+              </dl>
+            </div>
+            <div class="modal-footer">
+              {% if m.is_active %}
+                <a href="/admin/members/{{ m.id }}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
+                {% if manager_locked(request) and is_privileged_member(m) %}
+                  <button class="btn btn-sm btn-outline-danger" disabled title="Managers can't archive other managers or admins">Archive</button>
+                {% else %}
+                <form method="post" action="/admin/members/{{ m.id }}/delete" class="d-inline"
+                      onsubmit="return confirm('Archive {{ m.name }}? Their record and member code are kept.')">
+                  <button class="btn btn-sm btn-outline-danger">Archive</button>
+                </form>
+                {% endif %}
+              {% elif manager_locked(request) %}
+                <button class="btn btn-sm btn-outline-success" disabled title="Managers can't restore members">Restore</button>
+                <button class="btn btn-sm btn-outline-danger" disabled title="Managers can't permanently delete members"><i class="bi bi-trash me-1"></i>Delete</button>
+              {% else %}
+                <form method="post" action="/admin/members/{{ m.id }}/restore" class="d-inline">
+                  <button class="btn btn-sm btn-outline-success">Restore</button>
+                </form>
+                <form method="post" action="/admin/members/{{ m.id }}/purge" class="d-inline"
+                      onsubmit="return confirm('Permanently delete {{ m.name }}? This cannot be undone.')">
+                  <button class="btn btn-sm btn-outline-danger" title="Delete permanently"><i class="bi bi-trash me-1"></i>Delete</button>
+                </form>
+              {% endif %}
+            </div>
+          </div></div>
+        </div>
         {% else %}
-        <tr><td colspan="9" class="text-center text-muted py-4">No members yet. Add one or import a CSV.</td></tr>
+        <tr><td colspan="5" class="text-center text-muted py-4">No members yet. Add one or import a CSV.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -175,19 +209,23 @@
             <input name="slack_user_id" class="form-control" placeholder="U01ABC...">
           </div>
           <div class="mb-3">
-            <label class="form-label">Grade <small class="text-muted">(students only)</small></label>
+            <label class="form-label">Grade <small class="text-muted">(students; also kept for mentors who are past alumni)</small></label>
             <select name="grade" class="form-select">
               <option value="">—</option>
               {% for g in grades %}<option value="{{ g.value }}">{{ g | gradelabel }}</option>{% endfor %}
             </select>
           </div>
           <div class="mb-3">
-            <label class="form-label">Parent / Guardian 1 <small class="text-muted">(students only)</small></label>
-            <input name="parent_guardian_1" class="form-control" maxlength="200">
+            <label class="form-label">Parent / Guardian 1 Slack ID <small class="text-muted">(students only)</small></label>
+            <input name="parent_guardian_1" class="form-control" maxlength="200" placeholder="U01ABC...">
           </div>
           <div class="mb-3">
-            <label class="form-label">Parent / Guardian 2 <small class="text-muted">(students only)</small></label>
-            <input name="parent_guardian_2" class="form-control" maxlength="200">
+            <label class="form-label">Parent / Guardian 2 Slack ID <small class="text-muted">(students only)</small></label>
+            <input name="parent_guardian_2" class="form-control" maxlength="200" placeholder="U01ABC...">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Graduation Year <small class="text-muted">(students; also kept for mentors who are past alumni)</small></label>
+            <input type="number" name="graduation_year" class="form-control" min="1900" max="2200" placeholder="2027">
           </div>
         </div>
         <div class="modal-footer">

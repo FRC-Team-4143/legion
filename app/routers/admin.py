@@ -336,6 +336,7 @@ async def admin_members_create(
     grade: Optional[str] = Form(None),
     parent_guardian_1: Optional[str] = Form(None),
     parent_guardian_2: Optional[str] = Form(None),
+    graduation_year: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
     if redirect := _require_staff(request):
@@ -359,10 +360,13 @@ async def admin_members_create(
         subteam_id=_opt_id(subteam_id),
         slack_user_id=slack_uid,
         # Group membership is assigned from the User Groups page, not here.
-        # Grade + guardians are student-only.
-        grade=_opt_grade(grade) if is_student else None,
+        # Guardians are student-only. Grade + graduation_year are not role-gated here —
+        # a mentor who's a past alumnus can carry them too (see bump-grades / edit route
+        # for why they're not cleared on a student->mentor role switch).
+        grade=_opt_grade(grade),
         parent_guardian_1=(parent_guardian_1.strip() or None) if is_student and parent_guardian_1 else None,
         parent_guardian_2=(parent_guardian_2.strip() or None) if is_student and parent_guardian_2 else None,
+        graduation_year=_opt_id(graduation_year),
     )
     db.add(member)
     await audit.record(db, request, "member.create", f"Created {role} {member.name}", entity_type="member")
@@ -403,6 +407,7 @@ async def admin_members_edit_post(
     grade: Optional[str] = Form(None),
     parent_guardian_1: Optional[str] = Form(None),
     parent_guardian_2: Optional[str] = Form(None),
+    graduation_year: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
     if redirect := _require_staff(request):
@@ -431,11 +436,16 @@ async def admin_members_edit_post(
     member.subteam_id = _opt_id(subteam_id)
     member.slack_user_id = slack_uid
     # Group membership is assigned from the User Groups page, not here.
-    # Grade + guardians are student-only; clear them if the member is (now) a mentor.
+    # Guardians are student-only; clear them if the member is (now) a mentor. Grade +
+    # graduation_year are deliberately NOT cleared on a student->mentor switch — a
+    # former student who becomes a mentor keeps their grade/graduation history rather
+    # than losing it the moment their role flips (the population most likely to want
+    # that record kept).
     is_student = member.role == MemberRole.student
-    member.grade = _opt_grade(grade) if is_student else None
+    member.grade = _opt_grade(grade)
     member.parent_guardian_1 = (parent_guardian_1.strip() or None) if is_student and parent_guardian_1 else None
     member.parent_guardian_2 = (parent_guardian_2.strip() or None) if is_student and parent_guardian_2 else None
+    member.graduation_year = _opt_id(graduation_year)
     await audit.record(db, request, "member.edit", f"Edited {member.name}", entity_type="member", entity_id=member.id)
     await db.commit()
     return RedirectResponse("/admin/members", status_code=303)
@@ -517,8 +527,10 @@ async def admin_members_purge(member_id: int, request: Request, db: AsyncSession
 @router.post("/members/bump-grades")
 async def admin_members_bump_grades(request: Request, db: AsyncSession = Depends(get_db)):
     """Yearly grade auto-increase: advance every active student one grade. A senior
-    graduates to alumni AND is archived (dropped from active rosters / API syncs).
-    Students with no grade set are left untouched. A student who lands on Junior this
+    graduates to alumni AND is archived (dropped from active rosters / API syncs) AND
+    has `graduation_year` set to the current calendar year — not backfilled for
+    students who were already alumni before this ran (see the field's docstring in
+    models.py). Students with no grade set are left untouched. A student who lands on Junior this
     run is also moved onto team 4143 if they weren't already on it — MARS' Minions
     (4423) is the underclassman team, so reaching Junior is the trigger to move up to
     MARS/WARS. Only fires on the transition itself, not on students who were already
@@ -547,6 +559,7 @@ async def admin_members_bump_grades(request: Request, db: AsyncSession = Depends
             s.grade = StudentGrade.alumni
             s.is_active = False
             s.archived_at = datetime.utcnow()
+            s.graduation_year = datetime.utcnow().year
             graduated += 1
         else:
             s.grade = GRADE_ORDER[GRADE_ORDER.index(s.grade) + 1]
@@ -1005,6 +1018,7 @@ async def admin_import_post(request: Request, file: UploadFile = File(...), db: 
         grade_str = (row.get("grade") or "").strip()
         parent1 = (row.get("parent_guardian_1") or "").strip() or None
         parent2 = (row.get("parent_guardian_2") or "").strip() or None
+        grad_year_str = (row.get("graduation_year") or "").strip()
 
         if not role_str or not name:
             errors.append({"row": i, "reason": "Missing role or name", "data": dict(row)})
@@ -1018,6 +1032,13 @@ async def admin_import_post(request: Request, file: UploadFile = File(...), db: 
         except ValueError:
             errors.append({"row": i, "reason": f"Unknown grade '{grade_str}'", "data": dict(row)})
             continue
+
+        grad_year = None
+        if grad_year_str:
+            if not grad_year_str.isdigit():
+                errors.append({"row": i, "reason": f"Invalid graduation_year '{grad_year_str}'", "data": dict(row)})
+                continue
+            grad_year = int(grad_year_str)
 
         team = None
         if team_str:
@@ -1049,9 +1070,12 @@ async def admin_import_post(request: Request, file: UploadFile = File(...), db: 
             existing.subteam_id = st.id if st else None
             if slack_uid:
                 existing.slack_user_id = slack_uid
-            existing.grade = grade if is_student else None
+            # Guardians are student-only; grade/graduation_year are not (a mentor who's
+            # a past alumnus keeps them — see the edit route for why).
+            existing.grade = grade
             existing.parent_guardian_1 = parent1 if is_student else None
             existing.parent_guardian_2 = parent2 if is_student else None
+            existing.graduation_year = grad_year
             updated.append(name)
         else:
             # Group membership is deliberately not importable from CSV — granting admin
@@ -1065,9 +1089,10 @@ async def admin_import_post(request: Request, file: UploadFile = File(...), db: 
                 team_id=team.id if team else None,
                 subteam_id=st.id if st else None,
                 slack_user_id=slack_uid,
-                grade=grade if is_student else None,
+                grade=grade,
                 parent_guardian_1=parent1 if is_student else None,
                 parent_guardian_2=parent2 if is_student else None,
+                graduation_year=grad_year,
             ))
             created.append(name)
 

@@ -206,8 +206,15 @@ class Member(Base):
     grade: Mapped[Optional[StudentGrade]] = mapped_column(
         SAEnum(StudentGrade), nullable=True
     )
+    # The guardian's own Slack user ID (e.g. "U01ABC123"), not their name — Slack renders
+    # it as a linked profile in the custom profile field it's pushed into (slack_profile.py).
     parent_guardian_1: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     parent_guardian_2: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    # Calendar year a senior graduated. Auto-set by the Yearly Grade Increase action the
+    # moment it bumps a senior to alumni — not backfilled for alumni who graduated before
+    # this field existed, since there's no reliable historical record of when past bumps
+    # ran. Admins can still enter it by hand (edit form / CSV import) to backfill those.
+    graduation_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
