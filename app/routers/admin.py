@@ -428,8 +428,11 @@ async def admin_members_edit_post(
     if slack_uid != member.slack_user_id and (redirect := _require_auth(request)):
         return redirect
     if slack_uid and await _slack_owner(db, slack_uid, exclude_id=member.id):
+        # Redirect to the list (not the standalone edit page) — the members table's
+        # Edit action is an in-page modal now, so an error should land back where the
+        # user actually is rather than bouncing them to a page they never navigated to.
         return RedirectResponse(
-            f"/admin/members/{member_id}/edit?error=Slack+ID+{slack_uid}+is+already+linked+to+another+member",
+            f"/admin/members?error=Slack+ID+{slack_uid}+is+already+linked+to+another+member",
             status_code=303,
         )
 
