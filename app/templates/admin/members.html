@@ -91,6 +91,9 @@
           <th class="fs-th" data-col="graduation_year" data-sortable="true" data-sort-type="num">
             <span class="th-inner d-inline-flex align-items-center"><span class="th-label">Graduation Year</span></span>
           </th>
+          <th class="fs-th" data-col="years_on_team" data-sortable="true" data-sort-type="num">
+            <span class="th-inner d-inline-flex align-items-center"><span class="th-label">Years on Team</span></span>
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -105,6 +108,7 @@
           <td data-value="{{ m.subteam.label if m.subteam else '' }}">{{ m.subteam.label if m.subteam else '—' }}</td>
           <td data-value="{{ m.grade | graderank if m.grade else '' }}" data-label="{{ m.grade | gradelabel if m.grade else '' }}">{{ m.grade | gradelabel if m.grade else '—' }}</td>
           <td data-value="{{ m.graduation_year or '' }}">{{ m.graduation_year or '—' }}</td>
+          <td data-value="{{ m.years_on_team }}">{{ m.years_on_team }}</td>
         </tr>
         <div class="modal fade" id="memberDetail{{ m.id }}" tabindex="-1">
           <div class="modal-dialog"><div class="modal-content">
@@ -117,6 +121,7 @@
                 <dt class="col-sm-4">Role</dt><dd class="col-sm-8">{{ m.role | rolelabel }}</dd>
                 <dt class="col-sm-4">Team</dt><dd class="col-sm-8">{{ m.team.number ~ ' · ' ~ m.team.name if m.team else '—' }}</dd>
                 <dt class="col-sm-4">Subteam</dt><dd class="col-sm-8">{{ m.subteam.label if m.subteam else '—' }}</dd>
+                <dt class="col-sm-4">Years on Team</dt><dd class="col-sm-8">{{ m.years_on_team }}</dd>
                 {# Grade/graduation year survive a student->mentor role switch (a past
                    alumnus who's now mentoring), so show them for a mentor too if set —
                    but don't clutter every ordinary mentor's modal with an empty row. #}
@@ -230,6 +235,10 @@
                   <label class="form-label">Graduation Year <small class="text-muted">(auto-set when a senior is bumped to alumni, kept if they later become a mentor; edit to backfill historic records)</small></label>
                   <input type="number" name="graduation_year" class="form-control" min="1900" max="2200" value="{{ m.graduation_year or '' }}" placeholder="2027">
                 </div>
+                <div class="mb-3">
+                  <label class="form-label">Years on Team <small class="text-muted">(auto-incremented every Jan 31 for active members; edit to backfill)</small></label>
+                  <input type="number" name="years_on_team" class="form-control" min="0" value="{{ m.years_on_team }}">
+                </div>
                 <p class="text-muted small mb-0">Group membership is managed from <a href="/admin/groups">User Groups</a>, not here.</p>
               </form>
             </div>
@@ -240,7 +249,7 @@
           </div></div>
         </div>
         {% else %}
-        <tr><td colspan="6" class="text-center text-muted py-4">No members yet. Add one or import a CSV.</td></tr>
+        <tr><td colspan="7" class="text-center text-muted py-4">No members yet. Add one or import a CSV.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -301,6 +310,10 @@
           <div class="mb-3">
             <label class="form-label">Graduation Year <small class="text-muted">(students; also kept for mentors who are past alumni)</small></label>
             <input type="number" name="graduation_year" class="form-control" min="1900" max="2200" placeholder="2027">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Years on Team <small class="text-muted">(defaults to 0; auto-incremented every Jan 31)</small></label>
+            <input type="number" name="years_on_team" class="form-control" min="0" placeholder="0">
           </div>
         </div>
         <div class="modal-footer">

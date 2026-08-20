@@ -39,6 +39,7 @@ async def init_db() -> None:
         # Additive column migrations run after create_all (safe on both fresh + existing).
         await conn.run_sync(_migration_add_member_metadata)
         await conn.run_sync(_migration_add_graduation_year)
+        await conn.run_sync(_migration_add_years_on_team)
         # Move the retired `is_admin` flag into the legion-admin group, then drop it.
         await conn.run_sync(_migration_move_is_admin_to_group)
         # Drop the retired `is_lead` flag — no replacement, it's simply gone.
@@ -92,6 +93,18 @@ def _migration_add_graduation_year(conn) -> None:
     cols = {c["name"] for c in inspect(conn).get_columns("members")}
     if "graduation_year" not in cols:
         conn.execute(text("ALTER TABLE members ADD COLUMN graduation_year INTEGER"))
+
+
+def _migration_add_years_on_team(conn) -> None:
+    """Add the `years_on_team` column to an existing `members` table. No-op on a
+    freshly created schema, which already has it."""
+    from sqlalchemy import inspect, text
+
+    cols = {c["name"] for c in inspect(conn).get_columns("members")}
+    if "years_on_team" not in cols:
+        conn.execute(text(
+            "ALTER TABLE members ADD COLUMN years_on_team INTEGER NOT NULL DEFAULT 0"
+        ))
 
 
 def _migration_move_is_admin_to_group(conn) -> None:

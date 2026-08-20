@@ -215,6 +215,13 @@ class Member(Base):
     # this field existed, since there's no reliable historical record of when past bumps
     # ran. Admins can still enter it by hand (edit form / CSV import) to backfill those.
     graduation_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Auto-incremented by the yearly tenure job (services/scheduler.py) for every member
+    # active on January 31. Not role-gated — applies to students and mentors alike.
+    # Hand-editable (form / CSV import) to backfill real tenure for members who predate
+    # this field.
+    years_on_team: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
 
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
