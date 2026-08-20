@@ -28,9 +28,6 @@ router = APIRouter(prefix="/slack")
 
 # action_id (block_actions) -> owning app's /slack/interact URL.
 _ACTION_ID_EXACT = {
-    "edit_contributor": "tempus",
-    "edit_present": "tempus",
-    "edit_distraction": "tempus",
     "hours_quick": "munus",
     "hours_adjust": "munus",
     "review_edit": "munus",
@@ -40,14 +37,14 @@ _ACTION_ID_EXACT = {
     "sso_approve": "legion",
     "sso_deny": "legion",
 }
-_ACTION_ID_PREFIXES = {
-    "edit_select_": "tempus",
-}
 # view_submission callback_id -> owning app.
 _CALLBACK_ID_EXACT = {
     "log_hours": "munus",
     "review_hours": "munus",
     "opportunity_signup": "munus",
+    # Tempus's /edit — a single modal now, replacing the old edit_select_*/
+    # edit_contributor/edit_present/edit_distraction block_actions chain (removed above).
+    "edit_session": "tempus",
 }
 
 _client = httpx.AsyncClient(timeout=10.0)
@@ -68,9 +65,6 @@ def resolve_target(payload: dict) -> Optional[str]:
         action_id = (payload.get("actions") or [{}])[0].get("action_id", "")
         if action_id in _ACTION_ID_EXACT:
             return _target_url(_ACTION_ID_EXACT[action_id])
-        for prefix, app_name in _ACTION_ID_PREFIXES.items():
-            if action_id.startswith(prefix):
-                return _target_url(app_name)
         return None
     if ptype == "view_submission":
         callback_id = payload.get("view", {}).get("callback_id", "")

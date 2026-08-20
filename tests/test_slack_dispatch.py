@@ -22,13 +22,10 @@ def _view_submission(callback_id: str) -> dict:
 
 # ── resolve_target: pure routing logic ──────────────────────────────────────────
 
-def test_routes_tempus_action_ids():
-    for action_id in ("edit_contributor", "edit_present", "edit_distraction"):
-        assert resolve_target(_block_action(action_id)) == settings.tempus_interact_url
-
-
-def test_routes_tempus_prefixed_action_id():
-    assert resolve_target(_block_action("edit_select_42")) == settings.tempus_interact_url
+def test_routes_tempus_view_submission():
+    # Tempus's /edit — a single modal (edit_session). Unrouted callbacks are swallowed
+    # with a 200, so a missing entry silently drops the session edit instead of erroring.
+    assert resolve_target(_view_submission("edit_session")) == settings.tempus_interact_url
 
 
 def test_routes_munus_action_ids():
