@@ -147,7 +147,7 @@
                 <dd class="col-sm-8">
                   {% for g in m.groups %}<span class="badge bg-secondary me-1">{{ g.label }}</span>{% else %}—{% endfor %}
                 </dd>
-                <dt class="col-sm-4">Slack UID</dt><dd class="col-sm-8">{{ m.slack_user_id or '—' }}</dd>
+                <dt class="col-sm-4">Slack UID</dt><dd class="col-sm-8">{% if m.slack_user_id %}<code class="text-muted">{{ m.slack_user_id }}</code>{% else %}—{% endif %}</dd>
                 <dt class="col-sm-4">Username</dt><dd class="col-sm-8"><code class="text-muted">{{ m.username }}</code></dd>
                 <dt class="col-sm-4">Member Code</dt><dd class="col-sm-8"><code class="text-muted">{{ m.member_code }}</code></dd>
                 <dt class="col-sm-4">Created</dt><dd class="col-sm-8">{{ m.created_at | localdt }}</dd>
