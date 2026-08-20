@@ -127,6 +127,19 @@ def expired_link_return_to(token: Optional[str]) -> Optional[str]:
     return None  # not expired at all — nothing to rescue
 
 
+def make_link_url(member_code: str, return_to: str) -> str:
+    """A magic-link URL to Legion's own `/sso/link`, minted for Legion itself.
+
+    Every sibling app has a `legion_auth.make_link_url` for this (they hold the shared
+    `sso_secret` but not the token, so they build the URL alongside it); Legion mints
+    tokens locally already (`make_link_token`), so this is the same pairing for its own
+    callers — currently just the `/legion` Slack command (`routers/slack.py`), which
+    wants a one-tap link to Legion's home page the same way `/tempus`/`/munus` link to
+    theirs, without the sibling apps' HTTP round trip since Legion IS the issuer."""
+    token = make_link_token(member_code, return_to)
+    return f"{settings.base_url}/sso/link?token={quote(token, safe='')}"
+
+
 def make_link_sso_token(member: Member, via: str) -> str:
     """Cookie claims for an identity that arrived by magic link.
 

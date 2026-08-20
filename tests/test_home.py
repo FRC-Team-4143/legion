@@ -196,20 +196,22 @@ def test_tiles_grouped_by_kind():
 def test_app_commands_content():
     """Guards the actual command/description text, not just the wiring."""
     tempus_slugs = [cmd for cmd, _ in _APP_COMMANDS["Tempus"]]
-    assert tempus_slugs == ["/hours", "/shop", "/edit", "/gtfo", "/qr"]
-    assert _APP_COMMANDS["Munus"] == [("/vhours", "Check your volunteer hours")]
-    assert "Legion" not in _APP_COMMANDS
+    assert tempus_slugs == ["/tempus", "/hours", "/shop", "/edit", "/gtfo", "/qr"]
+    munus_slugs = [cmd for cmd, _ in _APP_COMMANDS["Munus"]]
+    assert munus_slugs == ["/munus", "/vhours"]
+    assert _APP_COMMANDS["Legion"] == [("/legion", "Get a one-tap link to Legion")]
 
 
 def test_commands_for_no_tiles_is_empty():
     assert commands_for([]) == []
 
 
-def test_commands_for_skips_apps_with_no_commands():
-    """Legion has no registered Slack commands, so a Legion-only tile list yields no
-    section at all."""
+def test_commands_for_lists_legion_for_a_legion_only_tile():
+    """Legion registered its own /legion command alongside Tempus's and Munus's."""
     tiles = tiles_for(_identity(groups=["legion-admin"]))
-    assert commands_for(tiles) == []
+    sections = commands_for(tiles)
+    assert [s["app"] for s in sections] == ["Legion"]
+    assert sections[0]["commands"] == _APP_COMMANDS["Legion"]
 
 
 def test_commands_for_lists_each_app_once():
@@ -234,7 +236,7 @@ def test_commands_for_multiple_apps_in_first_seen_order():
         settings.munus_public_url = "https://munus.example.org"
         tiles = tiles_for(_identity(groups=["legion-admin", "tempus-admin", "munus-admin"]))
         sections = commands_for(tiles)
-        assert [s["app"] for s in sections] == ["Tempus", "Munus"]
+        assert [s["app"] for s in sections] == ["Legion", "Tempus", "Munus"]
     finally:
         settings.tempus_public_url, settings.munus_public_url = original
 
@@ -299,7 +301,7 @@ async def test_root_shows_tempus_commands_once_in_their_own_section(client, db, 
         settings.tempus_public_url = original
 
 
-async def test_root_shows_no_commands_section_for_legion_only_tile(client, db, make_member):
+async def test_root_shows_legion_commands_section_for_legion_only_tile(client, db, make_member):
     member = await make_member(name="Legion Admin", groups=["legion-admin"])
     loaded = (
         await db.execute(
@@ -311,7 +313,8 @@ async def test_root_shows_no_commands_section_for_legion_only_tile(client, db, m
 
     resp = await client.get("/")
     assert resp.status_code == 200
-    assert "Slack Commands" not in resp.text
+    assert "Slack Commands" in resp.text
+    assert "/legion" in resp.text
 
 
 async def test_root_with_no_matching_groups_shows_empty_state(client, db, make_member):

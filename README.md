@@ -215,3 +215,10 @@ actually owns it (`tempus_interact_url` / `munus_interact_url` / `legion_interac
 in `config.py`). Each app still verifies the Slack signature itself on the forwarded
 copy, so the dispatcher adds no new trust boundary. Slash commands don't need this —
 each slash command has its own independently configurable Request URL already.
+
+**`/legion` slash command:** a one-tap magic link to Legion's own home page
+(`routers/slack.py`'s `slack_command`), mirroring Tempus's `/tempus` and Munus's
+`/munus`. Add it under **Slash Commands** in the same shared Slack app:
+`/legion` → `https://<your-host>/slack/command`. Needs the ordinary
+`SLACK_SIGNING_SECRET` (not `SLACK_AUTH_BOT_TOKEN` — this route sends no message of its
+own, it only replies inline to the command).

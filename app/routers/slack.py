@@ -1,9 +1,11 @@
 """
-Slack routes — interactive component handler for SSO Approve/Deny buttons. Legion had
-no inbound Slack before SSO (only the outbound profile-sync push); this is the first.
+Slack routes — interactive component handler for SSO Approve/Deny buttons, plus the
+`/legion` slash command. Legion had no inbound Slack before SSO (only the outbound
+profile-sync push); interactivity was the first, the slash command came later.
 
 POST /slack/interact — verified by `slack_signing_secret` (same HMAC scheme Munus uses
 in `routers/slack.py`).
+POST /slack/command   — the `/legion` slash command, same verification.
 """
 import hashlib
 import hmac
@@ -12,14 +14,16 @@ import time
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database import get_db
-from app.models import AuthRequest, AuthStatus
+from app.models import AuthRequest, AuthStatus, Member
 from app.services import slack_auth
+from app.services.sso import make_link_url
 
 router = APIRouter(prefix="/slack")
 
@@ -100,3 +104,39 @@ async def slack_interact(request: Request, db: AsyncSession = Depends(get_db)):
 
     await slack_auth.update_challenge_message(channel_id, ts, approved)
     return Response(status_code=200)
+
+
+@router.post("/command")
+async def slack_command(request: Request, db: AsyncSession = Depends(get_db)):
+    """`/legion` — a one-tap magic link to Legion's own home page (the app launcher
+    `tiles_for`/`commands_for` build, `services/home.py`). Mirrors Tempus's `/tempus`
+    and Munus's `/munus`: no stats, just the link. Legion mints the token locally
+    (`services/sso.make_link_url`) rather than over HTTP, since it's the token issuer —
+    the sibling apps' equivalents go through their own `legion_auth.make_link_url`,
+    which does the same thing across a process boundary."""
+    await _verify_slack_signature(request)
+
+    form = await request.form()
+    command = form.get("command", "")
+    user_id = form.get("user_id", "")
+
+    if command != "/legion":
+        return Response(content="Unknown command.", media_type="text/plain")
+
+    member = (
+        await db.execute(
+            select(Member).where(Member.slack_user_id == user_id, Member.is_active.is_(True))
+        )
+    ).scalars().first()
+    if member is None:
+        return Response(
+            content="❌ Your Slack account isn't linked to a Legion record. Please ask an admin.",
+            media_type="text/plain",
+        )
+
+    link = f"<{make_link_url(member.member_code, f'{settings.base_url}/')}|🏠 Open Legion>"
+    return JSONResponse({
+        "response_type": "ephemeral",
+        "text": link,
+        "blocks": [{"type": "section", "text": {"type": "mrkdwn", "text": link}}],
+    })

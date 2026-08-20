@@ -271,6 +271,18 @@ own. Unrecognized action/callback ids are swallowed with a 200, matching every a
 own "unknown action → no-op" convention. Slash commands don't route through this —
 each slash command has its own independently configurable Request URL already.
 
+### `/legion` slash command (`routers/slack.py`)
+A bare one-tap magic link to Legion's own home page (`/`), mirroring Tempus's
+`/tempus` and Munus's `/munus`. Legion mints the token locally
+(`services/sso.make_link_url`, wrapping `make_link_token`) rather than over HTTP like
+the sibling apps' `legion_auth.make_link_url` do — Legion doesn't need the round trip
+since it's the token issuer. Redemption is the same `GET /sso/link` every magic link
+uses regardless of which app minted it. Listed in `services/home.py`'s
+`_APP_COMMANDS["Legion"]`, so it only shows on the home page's "Slack Commands"
+section for someone who already gets a Legion tile — i.e. `legion-admin`/
+`legion-manager` today, since `tiles_for` has no personal (non-staff) Legion tile.
+The command itself has no such restriction — any active member can run it.
+
 ### Database migrations
 No Alembic. Add a `def _migration(conn)` guarded by `inspect(conn)` in `database.py` and
 call it from `init_db()`, mirroring the siblings. Examples:

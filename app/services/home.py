@@ -24,7 +24,11 @@ _PERSONAL_ICONS = {
 # tables to filter this by who can actually run which command, so it's a discovery aid,
 # not an access gate.
 _APP_COMMANDS: dict[str, list[tuple[str, str]]] = {
+    "Legion": [
+        ("/legion", "Get a one-tap link to Legion"),
+    ],
     "Tempus": [
+        ("/tempus", "Get a one-tap link to your dashboard"),
         ("/hours", "Check your weekly hours"),
         ("/shop", "See who's currently signed in"),
         ("/edit", "Edit a student's session (mentors)"),
@@ -32,6 +36,7 @@ _APP_COMMANDS: dict[str, list[tuple[str, str]]] = {
         ("/qr", "Get your kiosk QR badge"),
     ],
     "Munus": [
+        ("/munus", "Get a one-tap link to Munus"),
         ("/vhours", "Check your volunteer hours"),
     ],
 }
