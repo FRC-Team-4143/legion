@@ -51,6 +51,7 @@ def serialize_member(member: Member) -> dict:
         # (operates in-process).
         "grade": member.grade.value if member.grade else None,
         "graduation_year": member.graduation_year,
+        "years_on_team": member.years_on_team,
         "updated_at": isoformat_utc(member.updated_at),
     }
 

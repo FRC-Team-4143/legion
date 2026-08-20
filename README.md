@@ -88,6 +88,13 @@ set to the current calendar year. Graduation year is *not* auto-backfilled for a
 who graduated before this field existed — an admin can set it by hand (edit form or CSV
 import) if they want that historic record.
 
+Every member, student or mentor, also carries **Years on Team** — a running tenure
+counter, not role-gated. A scheduled job (`app/services/scheduler.py`) increments it by
+1 for every active member each year, just after January 31 ends. It's hand-editable
+(edit form or CSV import) to backfill real tenure for members who predate this field;
+a blank `years_on_team` in a CSV import leaves an existing member's count unchanged
+rather than resetting it to 0.
+
 ## Slack profile sync
 
 Legion can push a member's **Team**, **School Year** (grade), **Subteam**, and
@@ -108,7 +115,9 @@ must be an existing team), `subteam` (optional, a subteam slug), `slack_user_id`
 a grade name like `Sophomore`; also settable on a mentor row, see "Student metadata"
 above), `parent_guardian_1` / `parent_guardian_2` (optional,
 students only — the guardian's Slack `U...` ID, not their name), `graduation_year`
-(optional — a 4-digit year; also settable on a mentor row). Existing members are
+(optional — a 4-digit year; also settable on a mentor row), `years_on_team` (optional —
+a whole number; settable on either role, and a blank value leaves an existing member's
+count unchanged instead of resetting it to 0). Existing members are
 matched by name (case-insensitive) and updated; new
 members get a fresh `member_code` and `username`. Group membership is deliberately not
 importable — granting admin access (any group) always goes through the edit form, so a

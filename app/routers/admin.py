@@ -342,6 +342,7 @@ async def admin_members_create(
     parent_guardian_1: Optional[str] = Form(None),
     parent_guardian_2: Optional[str] = Form(None),
     graduation_year: Optional[str] = Form(None),
+    years_on_team: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
     if redirect := _require_staff(request):
@@ -367,11 +368,13 @@ async def admin_members_create(
         # Group membership is assigned from the User Groups page, not here.
         # Guardians are student-only. Grade + graduation_year are not role-gated here —
         # a mentor who's a past alumnus can carry them too (see bump-grades / edit route
-        # for why they're not cleared on a student->mentor role switch).
+        # for why they're not cleared on a student->mentor role switch). years_on_team is
+        # likewise not role-gated — it applies to students and mentors alike.
         grade=_opt_grade(grade),
         parent_guardian_1=(parent_guardian_1.strip() or None) if is_student and parent_guardian_1 else None,
         parent_guardian_2=(parent_guardian_2.strip() or None) if is_student and parent_guardian_2 else None,
         graduation_year=_opt_id(graduation_year),
+        years_on_team=_opt_id(years_on_team) or 0,
     )
     db.add(member)
     await audit.record(db, request, "member.create", f"Created {role} {member.name}", entity_type="member")
@@ -413,6 +416,7 @@ async def admin_members_edit_post(
     parent_guardian_1: Optional[str] = Form(None),
     parent_guardian_2: Optional[str] = Form(None),
     graduation_year: Optional[str] = Form(None),
+    years_on_team: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
     if redirect := _require_staff(request):
@@ -454,6 +458,7 @@ async def admin_members_edit_post(
     member.parent_guardian_1 = (parent_guardian_1.strip() or None) if is_student and parent_guardian_1 else None
     member.parent_guardian_2 = (parent_guardian_2.strip() or None) if is_student and parent_guardian_2 else None
     member.graduation_year = _opt_id(graduation_year)
+    member.years_on_team = _opt_id(years_on_team) or 0
     await audit.record(db, request, "member.edit", f"Edited {member.name}", entity_type="member", entity_id=member.id)
     await db.commit()
     return RedirectResponse("/admin/members", status_code=303)
@@ -1027,6 +1032,7 @@ async def admin_import_post(request: Request, file: UploadFile = File(...), db: 
         parent1 = (row.get("parent_guardian_1") or "").strip() or None
         parent2 = (row.get("parent_guardian_2") or "").strip() or None
         grad_year_str = (row.get("graduation_year") or "").strip()
+        years_str = (row.get("years_on_team") or "").strip()
 
         if not role_str or not name:
             errors.append({"row": i, "reason": "Missing role or name", "data": dict(row)})
@@ -1047,6 +1053,17 @@ async def admin_import_post(request: Request, file: UploadFile = File(...), db: 
                 errors.append({"row": i, "reason": f"Invalid graduation_year '{grad_year_str}'", "data": dict(row)})
                 continue
             grad_year = int(grad_year_str)
+
+        # Unlike graduation_year, years_on_team is a non-nullable running counter the
+        # yearly scheduler job maintains — a blank column means "leave it alone" (not
+        # "reset to 0"), so a routine CSV re-import of team/subteam assignments doesn't
+        # silently wipe out years the job already accrued.
+        years_on_team = None
+        if years_str:
+            if not years_str.isdigit():
+                errors.append({"row": i, "reason": f"Invalid years_on_team '{years_str}'", "data": dict(row)})
+                continue
+            years_on_team = int(years_str)
 
         team = None
         if team_str:
@@ -1084,6 +1101,8 @@ async def admin_import_post(request: Request, file: UploadFile = File(...), db: 
             existing.parent_guardian_1 = parent1 if is_student else None
             existing.parent_guardian_2 = parent2 if is_student else None
             existing.graduation_year = grad_year
+            if years_on_team is not None:
+                existing.years_on_team = years_on_team
             updated.append(name)
         else:
             # Group membership is deliberately not importable from CSV — granting admin
@@ -1101,6 +1120,7 @@ async def admin_import_post(request: Request, file: UploadFile = File(...), db: 
                 parent_guardian_1=parent1 if is_student else None,
                 parent_guardian_2=parent2 if is_student else None,
                 graduation_year=grad_year,
+                years_on_team=years_on_team if years_on_team is not None else 0,
             ))
             created.append(name)
 

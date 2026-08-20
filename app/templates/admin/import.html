@@ -65,13 +65,14 @@
             <tr><td><code>parent_guardian_1</code></td><td>optional</td><td>Guardian's Slack <code>U...</code> ID (students only)</td></tr>
             <tr><td><code>parent_guardian_2</code></td><td>optional</td><td>Guardian's Slack <code>U...</code> ID (students only)</td></tr>
             <tr><td><code>graduation_year</code></td><td>optional</td><td>A 4-digit year, e.g. <code>2027</code> — also settable for a mentor row</td></tr>
+            <tr><td><code>years_on_team</code></td><td>optional</td><td>A whole number of years, e.g. <code>3</code> — settable for either role; a blank value leaves an existing member's count unchanged rather than resetting it to 0 (it's auto-incremented every Jan 31)</td></tr>
           </tbody>
         </table>
         </div>
         <p class="text-muted small mb-1"><strong>Example:</strong></p>
-        <pre class="bg-dark text-light p-2 rounded small mb-0">role,name,team_number,subteam,slack_user_id,grade,parent_guardian_1,parent_guardian_2,graduation_year
-student,Alice Smith,4143,software,U01ABC123,Sophomore,U03PAR001,U03PAR002,2027
-mentor,Jane Doe,4143,design,U02XYZ456,,,,</pre>
+        <pre class="bg-dark text-light p-2 rounded small mb-0">role,name,team_number,subteam,slack_user_id,grade,parent_guardian_1,parent_guardian_2,graduation_year,years_on_team
+student,Alice Smith,4143,software,U01ABC123,Sophomore,U03PAR001,U03PAR002,2027,1
+mentor,Jane Doe,4143,design,U02XYZ456,,,,,4</pre>
       </div>
     </div>
   </div>
