@@ -151,14 +151,14 @@
                 {% endif %}
               {% elif manager_locked(request) %}
                 <button class="btn btn-sm btn-outline-success" disabled title="Managers can't restore members">Restore</button>
-                <button class="btn btn-sm btn-outline-danger" disabled title="Managers can't permanently delete members"><i class="bi bi-trash"></i></button>
+                <button class="btn btn-sm btn-outline-danger" disabled title="Managers can't permanently delete members"><i class="bi bi-trash me-1"></i>Delete</button>
               {% else %}
                 <form method="post" action="/admin/members/{{ m.id }}/restore" class="d-inline">
                   <button class="btn btn-sm btn-outline-success">Restore</button>
                 </form>
                 <form method="post" action="/admin/members/{{ m.id }}/purge" class="d-inline"
                       onsubmit="return confirm('Permanently delete {{ m.name }}? This cannot be undone.')">
-                  <button class="btn btn-sm btn-outline-danger" title="Delete permanently"><i class="bi bi-trash"></i></button>
+                  <button class="btn btn-sm btn-outline-danger" title="Delete permanently"><i class="bi bi-trash me-1"></i>Delete</button>
                 </form>
               {% endif %}
             </div>
