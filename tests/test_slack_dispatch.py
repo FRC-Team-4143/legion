@@ -45,6 +45,9 @@ def test_routes_munus_action_ids():
 def test_routes_munus_view_submissions():
     assert resolve_target(_view_submission("log_hours")) == settings.munus_interact_url
     assert resolve_target(_view_submission("review_hours")) == settings.munus_interact_url
+    # The announcement "View & sign up" modal. Unrouted callbacks are swallowed with a
+    # 200, so a missing entry silently drops the signup instead of erroring.
+    assert resolve_target(_view_submission("opportunity_signup")) == settings.munus_interact_url
 
 
 def test_routes_legion_action_ids():

@@ -47,6 +47,7 @@ _ACTION_ID_PREFIXES = {
 _CALLBACK_ID_EXACT = {
     "log_hours": "munus",
     "review_hours": "munus",
+    "opportunity_signup": "munus",
 }
 
 _client = httpx.AsyncClient(timeout=10.0)
