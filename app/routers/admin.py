@@ -417,6 +417,7 @@ async def admin_members_edit_post(
     parent_guardian_2: Optional[str] = Form(None),
     graduation_year: Optional[str] = Form(None),
     years_on_team: Optional[str] = Form(None),
+    return_status: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
     if redirect := _require_staff(request):
@@ -435,8 +436,10 @@ async def admin_members_edit_post(
         # Redirect to the list (not the standalone edit page) — the members table's
         # Edit action is an in-page modal now, so an error should land back where the
         # user actually is rather than bouncing them to a page they never navigated to.
+        # Carries return_status through too, so a collision doesn't silently bounce an
+        # admin viewing Archived/All back to the Active-only default.
         return RedirectResponse(
-            f"/admin/members?error=Slack+ID+{slack_uid}+is+already+linked+to+another+member",
+            f"/admin/members?status={return_status or 'active'}&error=Slack+ID+{slack_uid}+is+already+linked+to+another+member",
             status_code=303,
         )
 
@@ -461,7 +464,7 @@ async def admin_members_edit_post(
     member.years_on_team = _opt_id(years_on_team) or 0
     await audit.record(db, request, "member.edit", f"Edited {member.name}", entity_type="member", entity_id=member.id)
     await db.commit()
-    return RedirectResponse("/admin/members", status_code=303)
+    return RedirectResponse(f"/admin/members?status={return_status or 'active'}", status_code=303)
 
 
 @router.post("/members/{member_id}/regenerate-username")
