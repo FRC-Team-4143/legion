@@ -34,15 +34,73 @@
     return (td.textContent || '').trim();
   }
 
-  function TableController(table) {
+  function TableController(table, idx) {
     this.table = table;
     this.thead = table.querySelector('thead');
     this.tbody = table.querySelector('tbody');
     this.columns = [];
     this.sortState = null; // { index, dir: 'asc'|'desc' }
     this.emptyRow = null;
+    // Scoped per page + table position so a full-page reload (every admin form
+    // submit redirects back here) can restore what the user had set instead of
+    // silently dropping it.
+    this.storageKey = 'fs-state:' + location.pathname + ':' + (idx || 0);
     this.build();
   }
+
+  TableController.prototype.loadState = function () {
+    try {
+      var raw = sessionStorage.getItem(this.storageKey);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  TableController.prototype.saveState = function () {
+    try {
+      var filters = {};
+      this.columns.forEach(function (col) {
+        if (col.selected) filters[col.key] = col.selected.values;
+      });
+      sessionStorage.setItem(this.storageKey, JSON.stringify({ sortState: this.sortState, filters: filters }));
+    } catch (e) {
+      // Private-mode / quota errors just mean filters won't survive a reload.
+    }
+  };
+
+  TableController.prototype.applySavedState = function (saved) {
+    var self = this;
+    if (saved.filters) {
+      this.columns.forEach(function (col) {
+        if (col.filterable && Object.prototype.hasOwnProperty.call(saved.filters, col.key)) {
+          col.selected = { values: saved.filters[col.key] };
+          self.updateFunnel(col);
+        }
+      });
+    }
+    if (saved.sortState) {
+      var target = this.columns.filter(function (c) { return c.sortable && c.key === saved.sortState.key; })[0];
+      if (target) {
+        this.sortState = { key: saved.sortState.key, dir: saved.sortState.dir };
+        this.updateSortIcons();
+      }
+    }
+  };
+
+  TableController.prototype.updateSortIcons = function () {
+    var self = this;
+    this.columns.forEach(function (c) {
+      if (!c.sortable) return;
+      var icon = c.th.querySelector('.sort-icon');
+      if (!icon) return;
+      if (self.sortState && c.key === self.sortState.key) {
+        icon.className = 'sort-icon bi ' + (self.sortState.dir === 'asc' ? 'bi-caret-up-fill' : 'bi-caret-down-fill') + ' ms-1 text-danger';
+      } else {
+        icon.className = 'sort-icon bi bi-caret-down-fill opacity-25 ms-1';
+      }
+    });
+  };
 
   TableController.prototype.build = function () {
     var self = this;
@@ -91,7 +149,12 @@
 
     this.tbody.appendChild(this.emptyRow);
 
-    this.applyDefaults();
+    var saved = this.loadState();
+    if (saved) {
+      this.applySavedState(saved);
+    } else {
+      this.applyDefaults();
+    }
     this.render();
   };
 
@@ -290,18 +353,7 @@
   TableController.prototype.toggleSort = function (col) {
     var dir = this.sortState && this.sortState.key === col.key && this.sortState.dir === 'asc' ? 'desc' : 'asc';
     this.sortState = { key: col.key, dir: dir };
-
-    this.columns.forEach(function (c) {
-      if (!c.sortable) return;
-      var icon = c.th.querySelector('.sort-icon');
-      if (!icon) return;
-      if (c.key === col.key) {
-        icon.className = 'sort-icon bi ' + (dir === 'asc' ? 'bi-caret-up-fill' : 'bi-caret-down-fill') + ' ms-1 text-danger';
-      } else {
-        icon.className = 'sort-icon bi bi-caret-down-fill opacity-25 ms-1';
-      }
-    });
-
+    this.updateSortIcons();
     this.render();
   };
 
@@ -341,14 +393,16 @@
       this.emptyRow.classList.toggle('d-none', !(rows.length > 0 && visibleCount === 0));
       this.tbody.appendChild(this.emptyRow);
     }
+
+    this.saveState();
   };
 
-  function init(tableEl) {
-    return new TableController(tableEl);
+  function init(tableEl, idx) {
+    return new TableController(tableEl, idx);
   }
 
   document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('table[data-filter-sort]').forEach(function (t) { init(t); });
+    document.querySelectorAll('table[data-filter-sort]').forEach(function (t, idx) { init(t, idx); });
   });
 
   window.TableFilterSort = { init: init };
