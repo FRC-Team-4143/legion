@@ -91,9 +91,6 @@
           <th class="fs-th" data-col="graduation_year" data-sortable="true" data-sort-type="num">
             <span class="th-inner d-inline-flex align-items-center"><span class="th-label">Graduation Year</span></span>
           </th>
-          <th class="fs-th" data-col="years_on_team" data-sortable="true" data-sort-type="num">
-            <span class="th-inner d-inline-flex align-items-center"><span class="th-label">Years on Team</span></span>
-          </th>
         </tr>
       </thead>
       <tbody>
@@ -108,7 +105,6 @@
           <td data-value="{{ m.subteam.label if m.subteam else '' }}">{{ m.subteam.label if m.subteam else '—' }}</td>
           <td data-value="{{ m.grade | graderank if m.grade else '' }}" data-label="{{ m.grade | gradelabel if m.grade else '' }}">{{ m.grade | gradelabel if m.grade else '—' }}</td>
           <td data-value="{{ m.graduation_year or '' }}">{{ m.graduation_year or '—' }}</td>
-          <td data-value="{{ m.years_on_team }}">{{ m.years_on_team }}</td>
         </tr>
         <div class="modal fade" id="memberDetail{{ m.id }}" tabindex="-1">
           <div class="modal-dialog"><div class="modal-content">
