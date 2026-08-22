@@ -288,6 +288,50 @@ class AuthRequest(Base):
     member: Mapped[Optional["Member"]] = relationship("Member")
 
 
+class GraduationSurveyStatus(str, enum.Enum):
+    """State of one post-graduation survey. `sent` means the intro DM (with the "Fill
+    out quick survey" button) went out but the modal hasn't been submitted yet;
+    `completed` means the student submitted it. There's no `expired`/`denied` like
+    `AuthStatus` — this is a single best-effort round trip, not a security challenge."""
+    sent = "sent"
+    completed = "completed"
+
+
+class GraduationSurvey(Base):
+    """One post-graduation survey, created the moment the Yearly Grade Increase action
+    (`/admin/members/bump-grades`) bumps a senior to alumni with a `slack_user_id` on
+    file. Mirrors `AuthRequest`'s `slack_channel_id`/`slack_message_ts` shape (needed to
+    edit the DM in place once answered), but is a single Slack modal round trip rather
+    than a two-button state machine, so there's no nonce/expiry.
+
+    `slack_channel_id`/`slack_message_ts` are null when the DM send itself failed (no
+    Slack id, no bot token, or a Slack API error) — the row is still created so the
+    graduation event isn't silently unrecorded, even though there's no way to retry the
+    send today. `contact_email` is only ever set when `stay_in_touch` is true.
+    """
+    __tablename__ = "graduation_surveys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    member_id: Mapped[int] = mapped_column(Integer, ForeignKey("members.id"), nullable=False)
+    status: Mapped[GraduationSurveyStatus] = mapped_column(
+        SAEnum(GraduationSurveyStatus), nullable=False, default=GraduationSurveyStatus.sent
+    )
+    slack_channel_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    slack_message_ts: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    destination: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    field_of_study: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    stay_in_touch: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    contact_email: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    member: Mapped["Member"] = relationship("Member")
+
+
 class AuthThrottle(Base):
     """Rate-limit / exponential-backoff bucket for the SSO login prompt. `key` is either
     `device:<device_id>` (an anonymous per-browser cap, checked first) or

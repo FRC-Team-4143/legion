@@ -36,6 +36,7 @@ _ACTION_ID_EXACT = {
     "opportunity_view": "munus",
     "sso_approve": "legion",
     "sso_deny": "legion",
+    "grad_survey_start": "legion",
 }
 # view_submission callback_id -> owning app.
 _CALLBACK_ID_EXACT = {
@@ -45,6 +46,7 @@ _CALLBACK_ID_EXACT = {
     # Tempus's /edit — a single modal now, replacing the old edit_select_*/
     # edit_contributor/edit_present/edit_distraction block_actions chain (removed above).
     "edit_session": "tempus",
+    "grad_survey_submit": "legion",
 }
 
 _client = httpx.AsyncClient(timeout=10.0)

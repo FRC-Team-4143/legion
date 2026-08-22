@@ -10,6 +10,7 @@ POST /slack/command   — the `/legion` slash command, same verification.
 import hashlib
 import hmac
 import json
+import logging
 import time
 from datetime import datetime
 
@@ -21,9 +22,12 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database import get_db
-from app.models import AuthRequest, AuthStatus, Member
+from app.models import AuthRequest, AuthStatus, GraduationSurvey, GraduationSurveyStatus, Member
 from app.services import slack_auth
+from app.services.graduation_survey import survey_modal_view
 from app.services.sso import make_link_url
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/slack")
 
@@ -61,14 +65,26 @@ async def slack_interact(request: Request, db: AsyncSession = Depends(get_db)):
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid payload")
 
-    if payload.get("type") != "block_actions":
+    ptype = payload.get("type")
+    if ptype == "block_actions":
+        action = payload.get("actions", [{}])[0]
+        action_id = action.get("action_id", "")
+        if action_id in ("sso_approve", "sso_deny"):
+            return await _handle_sso_decision(payload, action_id, action, db)
+        if action_id == "grad_survey_start":
+            return await _handle_grad_survey_start(payload, action, db)
         return Response(status_code=200)
 
-    action = payload.get("actions", [{}])[0]
-    action_id = action.get("action_id", "")
-    if action_id not in ("sso_approve", "sso_deny"):
+    if ptype == "view_submission":
+        callback_id = payload.get("view", {}).get("callback_id", "")
+        if callback_id == "grad_survey_submit":
+            return await _handle_grad_survey_submit(payload, db)
         return Response(status_code=200)
 
+    return Response(status_code=200)
+
+
+async def _handle_sso_decision(payload: dict, action_id: str, action: dict, db: AsyncSession) -> Response:
     nonce = action.get("value", "")
     acting_slack_id = payload.get("user", {}).get("id", "")
 
@@ -103,6 +119,106 @@ async def slack_interact(request: Request, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     await slack_auth.update_challenge_message(channel_id, ts, approved)
+    return Response(status_code=200)
+
+
+async def _handle_grad_survey_start(payload: dict, action: dict, db: AsyncSession) -> Response:
+    """The student tapped "Fill out quick survey" on their graduation DM — pop the
+    Block Kit form. `trigger_id` is only valid for ~3s, so this must stay fast."""
+    try:
+        survey_id = int(action.get("value", ""))
+    except ValueError:
+        return Response(status_code=200)
+    acting_slack_id = payload.get("user", {}).get("id", "")
+
+    survey = (
+        await db.execute(
+            select(GraduationSurvey)
+            .options(selectinload(GraduationSurvey.member))
+            .where(GraduationSurvey.id == survey_id)
+        )
+    ).scalars().first()
+
+    # Only the graduated student themself can open their own survey — same actor check
+    # as the SSO Approve/Deny buttons above.
+    if (
+        survey is None
+        or survey.member is None
+        or survey.status != GraduationSurveyStatus.sent
+        or not acting_slack_id
+        or acting_slack_id != survey.member.slack_user_id
+    ):
+        return Response(status_code=200)
+
+    try:
+        await slack_auth.get_auth_slack_client().views_open(
+            trigger_id=payload.get("trigger_id", ""), view=survey_modal_view(survey.id)
+        )
+    except Exception as e:
+        log.error("Failed to open graduation survey modal: %s", e)
+    return Response(status_code=200)
+
+
+async def _handle_grad_survey_submit(payload: dict, db: AsyncSession) -> Response:
+    view = payload.get("view", {})
+    try:
+        survey_id = int(view.get("private_metadata", ""))
+    except ValueError:
+        return Response(status_code=200)
+    acting_slack_id = payload.get("user", {}).get("id", "")
+
+    survey = (
+        await db.execute(
+            select(GraduationSurvey)
+            .options(selectinload(GraduationSurvey.member))
+            .where(GraduationSurvey.id == survey_id)
+        )
+    ).scalars().first()
+
+    if (
+        survey is None
+        or survey.member is None
+        or survey.status != GraduationSurveyStatus.sent
+        or not acting_slack_id
+        or acting_slack_id != survey.member.slack_user_id
+    ):
+        return Response(status_code=200)
+
+    values = view.get("state", {}).get("values", {})
+    destination = (values.get("destination", {}).get("value", {}).get("value") or "").strip()
+    field_of_study = (values.get("field_of_study", {}).get("value", {}).get("value") or "").strip()
+    selected_option = values.get("stay_in_touch", {}).get("value", {}).get("selected_option") or {}
+    stay_in_touch = selected_option.get("value") == "yes"
+    email = (values.get("contact_email", {}).get("value", {}).get("value") or "").strip()
+
+    # Block Kit can't conditionally hide the email field on the "No" answer, so it's
+    # validated as required here instead — keeps the modal open with an inline error
+    # (Slack's `response_action: errors` shape) rather than silently dropping it.
+    if stay_in_touch and ("@" not in email or "." not in email.rsplit("@", 1)[-1]):
+        return JSONResponse({
+            "response_action": "errors",
+            "errors": {"contact_email": "Please enter a valid email so we can stay in touch."},
+        })
+
+    survey.destination = destination or None
+    survey.field_of_study = field_of_study or None
+    survey.stay_in_touch = stay_in_touch
+    survey.contact_email = email if stay_in_touch and email else None
+    survey.status = GraduationSurveyStatus.completed
+    survey.completed_at = datetime.utcnow()
+    channel_id, ts = survey.slack_channel_id, survey.slack_message_ts
+    await db.commit()
+
+    if channel_id and ts:
+        thanks = "✅ Thanks for filling out the survey!"
+        try:
+            await slack_auth.get_auth_slack_client().chat_update(
+                channel=channel_id, ts=ts, text=thanks,
+                blocks=[{"type": "section", "text": {"type": "mrkdwn", "text": thanks}}],
+            )
+        except Exception as e:
+            log.error("Failed to update graduation survey DM: %s", e)
+
     return Response(status_code=200)
 
 

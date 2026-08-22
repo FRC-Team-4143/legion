@@ -94,13 +94,15 @@ app/
     admin.py         # SSO(+break-glass password)-protected management UI
     api.py           # Read-only JSON API (X-API-Key protected) — the sync contract
     sso.py           # SSO endpoints: authorize / status / complete / logout
-    slack.py         # Inbound Slack interactivity — SSO Approve/Deny button clicks
+    slack.py         # Inbound Slack interactivity — SSO Approve/Deny clicks, graduation
+                     # survey button + modal submission
     slack_dispatch.py # /slack/dispatch — shared interactivity relay (see below)
   services/
     members.py       # member_code generation + JSON serializers (shared by API + admin)
     username.py      # SSO username generation (last.first) + collision handling
     sso.py           # mw_sso cookie mint/verify + device cookie + return_to allow-list
     slack_auth.py    # Outbound SSO challenge DM (Approve/Deny) + message update/delete
+    graduation_survey.py # Outbound post-graduation survey DM + its Block Kit modal
     throttle.py      # SSO login rate limit / exponential backoff
     backup.py        # SQLite snapshot backup + staged restore (VACUUM INTO)
     scheduler.py     # APScheduler: nightly backup, SSO DM cleanup sweep
@@ -243,6 +245,28 @@ before any browser starts polling. `GET /sso/pending/{nonce}` just renders the e
 `sso/pending.html` addressed by nonce alone — `/sso/status` and `/sso/complete` are
 unchanged and shared by both flows. See Munus's `services/legion_auth.py` for the
 consumer side.
+
+### Post-graduation survey (`models.GraduationSurvey`, `services/graduation_survey.py`)
+The Yearly Grade Increase action (`/admin/members/bump-grades`) sends a graduating
+senior (one with a `slack_user_id` on file — students with none are just skipped and
+counted, since Legion has no other contact info for them) a DM asking where they're
+headed after high school, what they're studying/their job title, and whether they'd
+like to stay in touch (with an email if so). Answers are collected via a Slack **modal**
+(`graduation_survey.survey_modal_view`), not free-text replies — nothing in this
+workspace listens to Slack message events, so a modal reuses existing interactivity
+plumbing instead of standing up new infrastructure. This is Legion's first use of
+`view_submission` (previously `/slack/interact` only ever handled `block_actions`, for
+the SSO buttons above), so **both** the button click (`grad_survey_start`) and the modal
+submit (`grad_survey_submit`) are registered in `slack_dispatch.py`'s routing tables —
+skipping either makes Slack's click/submit silently no-op. The email field is always
+shown (Block Kit can't conditionally reveal it based on the Yes/No answer without an
+extra round trip) but is required only when "stay in touch" is Yes, enforced server-side
+via Slack's `response_action: errors` shape so an incomplete submission reopens the
+modal with an inline error instead of silently dropping it. `GraduationSurvey` mirrors
+`AuthRequest`'s `slack_channel_id`/`slack_message_ts` shape (edits the DM to a "Thanks!"
+once answered) but is a single best-effort round trip with no nonce/expiry. Answers are
+DB-only for now — no admin page yet; the bump-grades summary banner shows send/skip
+counts as its only visibility.
 
 ### User groups (`models.Group`, `member_user_groups`, `routers/admin.py`)
 Admin-editable authorization groups (`legion-admin`, `munus-admin`, `tempus-admin`, …),

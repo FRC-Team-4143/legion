@@ -23,10 +23,11 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.database import get_db
 from app.models import (
-    AuditLog, GRADE_LABELS, GRADE_ORDER, Group, Member, MemberRole,
+    AuditLog, GRADE_LABELS, GRADE_ORDER, GraduationSurvey, Group, Member, MemberRole,
     StudentGrade, Subteam, Team, grade_label, member_user_groups, role_label,
 )
 from app.services import audit, throttle
+from app.services.graduation_survey import send_survey_dm
 from app.services.members import generate_member_code
 from app.services.sso import sso_identity
 from app.services.username import assign_unique_username
@@ -551,7 +552,10 @@ async def admin_members_bump_grades(request: Request, db: AsyncSession = Depends
     (4423) is the underclassman team, so reaching Junior is the trigger to move up to
     MARS/WARS. Only fires on the transition itself, not on students who were already
     Junior before this run (so an intentional manual placement isn't silently undone
-    by re-running this action)."""
+    by re-running this action). A graduating senior with a `slack_user_id` on file is
+    also sent the post-graduation survey DM (see `services/graduation_survey.py`) —
+    students with no linked Slack account are simply skipped, since Legion has no other
+    contact info to reach them with."""
     if redirect := _require_auth(request):
         return redirect
 
@@ -567,7 +571,7 @@ async def admin_members_bump_grades(request: Request, db: AsyncSession = Depends
         )
     ).scalars().all()
 
-    bumped = graduated = team_moved = 0
+    bumped = graduated = team_moved = surveys_sent = surveys_skipped = 0
     for s in students:
         if s.grade == StudentGrade.alumni:
             continue  # already graduated
@@ -577,6 +581,17 @@ async def admin_members_bump_grades(request: Request, db: AsyncSession = Depends
             s.archived_at = datetime.utcnow()
             s.graduation_year = datetime.utcnow().year
             graduated += 1
+            if s.slack_user_id:
+                survey = GraduationSurvey(member_id=s.id)
+                db.add(survey)
+                await db.flush()  # assigns survey.id, needed by the DM's button value
+                channel_id, ts = await send_survey_dm(s, survey.id) or (None, None)
+                survey.slack_channel_id = channel_id
+                survey.slack_message_ts = ts
+                if channel_id:
+                    surveys_sent += 1
+            else:
+                surveys_skipped += 1
         else:
             s.grade = GRADE_ORDER[GRADE_ORDER.index(s.grade) + 1]
             bumped += 1
@@ -588,14 +603,18 @@ async def admin_members_bump_grades(request: Request, db: AsyncSession = Depends
         await audit.record(
             db, request, "member.bump_grades",
             f"Yearly grade increase: {bumped} advanced, {graduated} graduated + archived, "
-            f"{team_moved} moved to 4143",
+            f"{team_moved} moved to 4143, {surveys_sent} graduation surveys sent",
             entity_type="member",
-            detail={"bumped": bumped, "graduated": graduated, "team_moved": team_moved},
+            detail={
+                "bumped": bumped, "graduated": graduated, "team_moved": team_moved,
+                "surveys_sent": surveys_sent, "surveys_skipped": surveys_skipped,
+            },
         )
         await db.commit()
     msg = (
         f"Grade increase: {bumped} advanced, {graduated} graduated and archived, "
-        f"{team_moved} moved to team 4143."
+        f"{team_moved} moved to team 4143. "
+        f"{surveys_sent} graduation surveys sent, {surveys_skipped} skipped (no Slack ID linked)."
     )
     return RedirectResponse(f"/admin/members?message={quote(msg)}", status_code=303)
 
