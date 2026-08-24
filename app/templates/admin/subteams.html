@@ -12,19 +12,47 @@
 <div class="alert alert-danger alert-dismissible fade show py-2"><i class="bi bi-exclamation-triangle me-1"></i> {{ error }}<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
 {% endif %}
 
-<p class="text-muted small">Subteams / focus areas members can belong to. Archiving a subteam hides it from new assignments but keeps it on existing members and in the API. Once archived, it can be permanently deleted.</p>
+<p class="text-muted small">Subteams / focus areas members can belong to. Archiving a subteam hides it from new assignments but keeps it on existing members and in the API. Once archived, it can be permanently deleted. Counts are of <strong>active</strong> members only, broken out by team and role.</p>
 
 <div class="card">
   <div class="card-body p-0">
     <div class="table-responsive">
     <table class="table table-hover mb-0 align-middle">
-      <thead class="table-light"><tr><th>Label</th><th>Slug</th><th>Members</th><th>Status</th><th></th></tr></thead>
+      {# Two-row header: the team number spans its Students/Mentors pair, so the count
+         columns stay narrow instead of repeating "4143" in every heading. #}
+      <thead class="table-light">
+        <tr>
+          <th rowspan="2">Label</th><th rowspan="2">Slug</th>
+          {% for t in teams %}<th colspan="2" class="text-center border-start">{{ t.number }}</th>{% endfor %}
+          {% if show_no_team %}<th colspan="2" class="text-center border-start text-nowrap">No Team</th>{% endif %}
+          <th rowspan="2" class="text-end border-start">Total</th>
+          <th rowspan="2">Status</th><th rowspan="2"></th>
+        </tr>
+        <tr>
+          {% for t in teams %}
+          <th class="text-end border-start fw-normal">Students</th>
+          <th class="text-end fw-normal">Mentors</th>
+          {% endfor %}
+          {% if show_no_team %}
+          <th class="text-end border-start fw-normal">Students</th>
+          <th class="text-end fw-normal">Mentors</th>
+          {% endif %}
+        </tr>
+      </thead>
       <tbody>
         {% for row in groups %}
         <tr {% if not row.group.is_active %}class="table-secondary"{% endif %}>
           <td>{{ row.group.label }}</td>
           <td><code class="text-muted">{{ row.group.slug }}</code></td>
-          <td><span class="badge bg-secondary">{{ row.count }}</span></td>
+          {% for cell in row.cells %}
+          <td class="text-end border-start{% if not cell.students %} text-muted{% endif %}">{{ cell.students }}</td>
+          <td class="text-end{% if not cell.mentors %} text-muted{% endif %}">{{ cell.mentors }}</td>
+          {% endfor %}
+          {% if show_no_team %}
+          <td class="text-end border-start{% if not row.no_team.students %} text-muted{% endif %}">{{ row.no_team.students }}</td>
+          <td class="text-end{% if not row.no_team.mentors %} text-muted{% endif %}">{{ row.no_team.mentors }}</td>
+          {% endif %}
+          <td class="text-end border-start"><span class="badge bg-secondary">{{ row.count }}</span></td>
           <td>{% if row.group.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Archived</span>{% endif %}</td>
           <td class="text-end">
             <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editGroup{{ row.group.id }}">Rename</button>
@@ -56,7 +84,7 @@
           </div></div>
         </div>
         {% else %}
-        <tr><td colspan="5" class="text-center text-muted py-4">No subteams yet.</td></tr>
+        <tr><td colspan="{{ 5 + 2 * teams|length + (2 if show_no_team else 0) }}" class="text-center text-muted py-4">No subteams yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>

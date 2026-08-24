@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -650,10 +650,14 @@ async def admin_members_sync_slack(request: Request, db: AsyncSession = Depends(
 async def admin_teams_list(request: Request, db: AsyncSession = Depends(get_db)):
     if redirect := _require_auth(request):
         return redirect
+    students = func.count(case((Member.role == MemberRole.student, Member.id)))
+    mentors = func.count(case((Member.role == MemberRole.mentor, Member.id)))
     teams = (
         await db.execute(
-            select(Team, func.count(Member.id))
-            .outerjoin(Member, Member.team_id == Team.id)
+            select(Team, students, mentors)
+            # is_active belongs in the JOIN condition, not a WHERE — a WHERE would drop
+            # a team whose members are all archived off the page entirely.
+            .outerjoin(Member, (Member.team_id == Team.id) & Member.is_active.is_(True))
             .group_by(Team.id)
             .order_by(Team.number)
         )
@@ -662,7 +666,10 @@ async def admin_teams_list(request: Request, db: AsyncSession = Depends(get_db))
         "admin/teams.html",
         {
             "request": request,
-            "teams": [{"team": t, "count": c} for t, c in teams],
+            "teams": [
+                {"team": t, "students": s, "mentors": m, "count": s + m}
+                for t, s, m in teams
+            ],
             "error": request.query_params.get("error"),
         },
     )
@@ -712,19 +719,55 @@ async def admin_teams_edit(
 async def admin_subteams_list(request: Request, db: AsyncSession = Depends(get_db)):
     if redirect := _require_auth(request):
         return redirect
-    groups = (
-        await db.execute(
-            select(Subteam, func.count(Member.id))
-            .outerjoin(Member, Member.subteam_id == Subteam.id)
-            .group_by(Subteam.id)
-            .order_by(Subteam.sort_order, Subteam.label)
-        )
-    ).all()
+    # Each row breaks its roster down by team x role. Teams are admin-editable data, so
+    # the column set isn't a constant — one grouped count, pivoted in Python, beats
+    # building the columns in SQL. Looping over subteams (rather than over count rows)
+    # also keeps a member-less subteam on the page as a row of zeros.
+    #
+    # Deliberately not _active_subteams(): this page lists archived subteams too (their
+    # row styling and Restore/purge buttons depend on it).
+    subteams = (
+        await db.execute(select(Subteam).order_by(Subteam.sort_order, Subteam.label))
+    ).scalars().all()
+    teams = await _active_teams(db)  # ordered by number — drives the column order
+
+    counts = {
+        (subteam_id, team_id, role): n
+        for subteam_id, team_id, role, n in (
+            await db.execute(
+                select(Member.subteam_id, Member.team_id, Member.role, func.count(Member.id))
+                .where(Member.is_active.is_(True))
+                .group_by(Member.subteam_id, Member.team_id, Member.role)
+            )
+        ).all()
+    }
+
+    def _cell(subteam_id: int, team_id: Optional[int]) -> dict:
+        return {
+            "students": counts.get((subteam_id, team_id, MemberRole.student), 0),
+            "mentors": counts.get((subteam_id, team_id, MemberRole.mentor), 0),
+        }
+
+    groups = []
+    for st in subteams:
+        cells = [_cell(st.id, t.id) for t in teams]
+        no_team = _cell(st.id, None)  # members with no team assigned still count
+        groups.append({
+            "group": st,
+            "cells": cells,
+            "no_team": no_team,
+            "count": sum(c["students"] + c["mentors"] for c in cells + [no_team]),
+        })
+    # Only widen the table with a "No Team" pair when someone actually has no team.
+    show_no_team = any(r["no_team"]["students"] or r["no_team"]["mentors"] for r in groups)
+
     return templates.TemplateResponse(
         "admin/subteams.html",
         {
             "request": request,
-            "groups": [{"group": g, "count": c} for g, c in groups],
+            "groups": groups,
+            "teams": teams,
+            "show_no_team": show_no_team,
             "error": request.query_params.get("error"),
         },
     )
