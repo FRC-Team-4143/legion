@@ -93,3 +93,69 @@ async def test_admin_purge_subteam_deletes_it_and_clears_member_assignment(clien
     loaded = await _member(db, mid)
     assert loaded is not None
     assert loaded.subteam is None
+
+
+# ── List page counts: a column per team x role ─────────────────────────────────
+
+def _row_html(html, slug):
+    """The <tr> chunk of the subteams table for the row with this slug."""
+    return next(c for c in html.split("<tr") if f">{slug}</code>" in c)
+
+
+def _count_cells(html, slug):
+    """That row's ordered per-team-per-role count cells (4143 students, 4143 mentors,
+    4423 students, 4423 mentors, then the No Team pair when it's shown)."""
+    import re
+    return [int(n) for n in re.findall(r'class="text-end[^"]*">(\d+)</td>', _row_html(html, slug))]
+
+
+def _total(html, slug):
+    import re
+    return int(re.search(r'badge bg-secondary">(\d+)<', _row_html(html, slug)).group(1))
+
+
+async def test_subteams_list_splits_counts_by_team_and_role(client, make_member):
+    from app.models import MemberRole
+
+    await make_member(name="Ada Lovelace", team_number=4143, subteam_slug="software")
+    await make_member(name="Grace Hopper", team_number=4143, subteam_slug="software")
+    await make_member(name="Alan Turing", team_number=4143, subteam_slug="software",
+                      role=MemberRole.mentor)
+    await make_member(name="Katherine Johnson", team_number=4423, subteam_slug="software")
+    # Archived members don't count toward anything.
+    await make_member(name="Mary Jackson", team_number=4423, subteam_slug="software",
+                      is_active=False)
+    await _login(client)
+
+    resp = await client.get("/admin/subteams")
+    assert resp.status_code == 200
+    # Grouped header: a team number spanning its own Students / Mentors pair.
+    assert '<th colspan="2" class="text-center border-start">4143</th>' in resp.text
+    assert '<th colspan="2" class="text-center border-start">4423</th>' in resp.text
+    assert _count_cells(resp.text, "software") == [2, 1, 1, 0]
+    assert _total(resp.text, "software") == 4
+
+
+async def test_subteams_list_shows_zeros_for_empty_subteam(client, make_member):
+    await make_member(name="Ada Lovelace", team_number=4143, subteam_slug="software")
+    await _login(client)
+
+    resp = await client.get("/admin/subteams")
+    # "business" has no members at all but still gets a full row of zeros.
+    assert _count_cells(resp.text, "business") == [0, 0, 0, 0]
+    assert _total(resp.text, "business") == 0
+
+
+async def test_subteams_list_no_team_columns_only_when_needed(client, make_member):
+    await make_member(name="Ada Lovelace", team_number=4143, subteam_slug="software")
+    await _login(client)
+
+    resp = await client.get("/admin/subteams")
+    assert "No Team" not in resp.text
+
+    # A member with no team assigned makes the pair appear — and still counts in Total.
+    await make_member(name="Grace Hopper", team_number=None, subteam_slug="software")
+    resp = await client.get("/admin/subteams")
+    assert "No Team" in resp.text
+    assert _count_cells(resp.text, "software") == [1, 0, 0, 0, 1, 0]
+    assert _total(resp.text, "software") == 2

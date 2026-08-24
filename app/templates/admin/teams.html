@@ -22,7 +22,10 @@
         <tr>
           <td><strong>{{ row.team.number }}</strong></td>
           <td>{{ row.team.name }}</td>
-          <td><span class="badge bg-secondary">{{ row.count }}</span></td>
+          <td class="text-nowrap">
+            <span class="badge bg-secondary">{{ row.count }}</span>
+            <span class="text-muted small ms-1">{{ row.students }} student{{ '' if row.students == 1 else 's' }} · {{ row.mentors }} mentor{{ '' if row.mentors == 1 else 's' }}</span>
+          </td>
           <td class="text-end">
             <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editTeam{{ row.team.id }}">Rename</button>
           </td>
