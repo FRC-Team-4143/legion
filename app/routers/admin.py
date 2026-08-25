@@ -622,25 +622,33 @@ async def admin_members_bump_grades(request: Request, db: AsyncSession = Depends
 @router.post("/members/sync-slack")
 async def admin_members_sync_slack(request: Request, db: AsyncSession = Depends(get_db)):
     """Push every active member's roster metadata into their Slack custom profile
-    fields on demand. This is the only way the sync runs — no scheduled job."""
+    fields, and sync the fixed role/team/subteam Slack usergroups, on demand. This is
+    the only way either sync runs — no scheduled job."""
     if redirect := _require_auth(request):
         return redirect
-    from app.services import slack_profile
+    from app.services import slack_profile, slack_usergroups
 
     if not settings.slack_bot_token:
         return RedirectResponse(
             f"/admin/members?message={quote('Slack sync skipped: no SLACK_BOT_TOKEN configured.')}",
             status_code=303,
         )
-    result = await slack_profile.sync_all_profiles(db)
+    profiles = await slack_profile.sync_all_profiles(db)
+    usergroups = await slack_usergroups.sync_all_usergroups(db)
     await audit.record(
         db, request, "member.sync_slack",
-        f"Slack profile sync: {result['sent']} sent, {result['skipped']} skipped, {result['failed']} failed",
+        f"Slack sync: profiles {profiles['sent']} sent, {profiles['skipped']} skipped, "
+        f"{profiles['failed']} failed; usergroups {usergroups['sent']} sent, "
+        f"{usergroups['skipped']} skipped, {usergroups['failed']} failed",
         entity_type="member",
-        detail=result,
+        detail={"profiles": profiles, "usergroups": usergroups},
     )
     await db.commit()
-    msg = f"Slack sync: {result['sent']} sent, {result['skipped']} skipped, {result['failed']} failed."
+    msg = (
+        f"Slack sync: {profiles['sent']} profiles sent, {profiles['skipped']} skipped, "
+        f"{profiles['failed']} failed. {usergroups['sent']} usergroups sent, "
+        f"{usergroups['skipped']} skipped, {usergroups['failed']} failed."
+    )
     return RedirectResponse(f"/admin/members?message={quote(msg)}", status_code=303)
 
 
