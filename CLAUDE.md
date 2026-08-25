@@ -342,6 +342,19 @@ cached `AsyncWebClient` + swallow-and-log pattern. Manual-only — triggered sol
 IDs are constants in the service. Requires an **admin user token** (`xoxp-…`) — a bot
 token can only edit its own profile.
 
+The same button also runs `services/slack_usergroups.py`, which keeps a fixed set of
+existing Slack **User Groups** (`@4143`/`@4423`/`@business`/`@software`/`@design`/
+`@students`/`@mentors`) in sync with Legion's roster — distinct from Legion's own `Group`
+model; these are Slack's native usergroup feature, keyed off `Member.role`/`team_id`/
+`subteam_id` only, no new Legion data. Slack's `usergroups.users.update` **replaces** a
+usergroup's whole member list per call (no incremental add/remove), so Legion becomes the
+fully authoritative source for these 7 groups' Slack membership — anyone in one who isn't
+an active, Slack-linked, matching member is removed on sync. If a usergroup would come out
+empty (nobody active matches), it's left alone rather than cleared. Usergroup IDs are
+constants in the service, same pattern as the profile field IDs. Also needs the
+**`usergroups:write`** OAuth scope on `slack_bot_token`'s Slack app, in addition to the
+profile-write scope the plain profile sync needs.
+
 ## UI Conventions
 Single dark theme shared with Tempus/Munus (`#0a0a0a` bg, `#111111` panels, accent red
 `#cc2200`, borders `#2a1a1a`). Admin pages extend `admin/base.html` (Bootstrap 5 with
