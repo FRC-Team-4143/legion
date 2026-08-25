@@ -487,6 +487,22 @@ async def admin_members_regenerate_username(member_id: int, request: Request, db
     return RedirectResponse(f"/admin/members/{member_id}/edit", status_code=303)
 
 
+async def _resync_slack_usergroups(db: AsyncSession) -> None:
+    """Best-effort immediate resync of the fixed role/team/subteam Slack usergroups —
+    called right after a member is archived so they drop out of every usergroup
+    they matched (`sync_all_usergroups` already filters on `is_active`) without
+    waiting on the next manual "Sync to Slack" click. Never raises: mirrors
+    `slack_usergroups.sync_usergroup`'s own swallow-and-log discipline, and archiving
+    a member must not fail just because Slack is unreachable."""
+    if not settings.slack_bot_token:
+        return
+    from app.services import slack_usergroups
+    try:
+        await slack_usergroups.sync_all_usergroups(db)
+    except Exception as e:
+        log.error("Slack usergroup resync-on-archive failed: %s", e)
+
+
 @router.post("/members/{member_id}/delete")
 async def admin_members_delete(member_id: int, request: Request, db: AsyncSession = Depends(get_db)):
     """Archive a member (soft delete) — keeps the record and its member_code on file.
@@ -507,6 +523,7 @@ async def admin_members_delete(member_id: int, request: Request, db: AsyncSessio
         member.archived_at = datetime.utcnow()
         await audit.record(db, request, "member.archive", f"Archived {member.name}", entity_type="member", entity_id=member.id)
         await db.commit()
+        await _resync_slack_usergroups(db)
     return RedirectResponse("/admin/members?status=all", status_code=303)
 
 
@@ -611,6 +628,8 @@ async def admin_members_bump_grades(request: Request, db: AsyncSession = Depends
             },
         )
         await db.commit()
+        if graduated:
+            await _resync_slack_usergroups(db)
     msg = (
         f"Grade increase: {bumped} advanced, {graduated} graduated and archived, "
         f"{team_moved} moved to team 4143. "
