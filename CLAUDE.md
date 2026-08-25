@@ -355,6 +355,17 @@ constants in the service, same pattern as the profile field IDs. Also needs the
 **`usergroups:write`** OAuth scope on `slack_bot_token`'s Slack app, in addition to the
 profile-write scope the plain profile sync needs.
 
+Archiving a member — the manual `POST /members/{id}/delete` button, or the yearly
+Grade Increase's senior→alumni auto-archive (`/admin/members/bump-grades`) — also
+triggers an immediate, best-effort `sync_all_usergroups(db)` right after the commit
+(`_resync_slack_usergroups` in `routers/admin.py`), so an archived member drops out of
+every usergroup they matched without waiting on the next manual "Sync to Slack" click.
+Gated on `slack_bot_token` the same way, and never raises (archiving must not fail just
+because Slack is unreachable). It resyncs all 7 usergroups rather than only the ones
+the archived member belonged to — simpler, reuses the existing function as-is, and
+archiving isn't a hot path. Restore (`/members/{id}/restore`) does **not** get the same
+treatment — a restored member is only re-added on the next manual sync.
+
 ## UI Conventions
 Single dark theme shared with Tempus/Munus (`#0a0a0a` bg, `#111111` panels, accent red
 `#cc2200`, borders `#2a1a1a`). Admin pages extend `admin/base.html` (Bootstrap 5 with
