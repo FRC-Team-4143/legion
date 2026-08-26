@@ -344,16 +344,19 @@ token can only edit its own profile.
 
 The same button also runs `services/slack_usergroups.py`, which keeps a fixed set of
 existing Slack **User Groups** (`@4143`/`@4423`/`@business`/`@software`/`@design`/
-`@students`/`@mentors`) in sync with Legion's roster — distinct from Legion's own `Group`
-model; these are Slack's native usergroup feature, keyed off `Member.role`/`team_id`/
-`subteam_id` only, no new Legion data. Slack's `usergroups.users.update` **replaces** a
-usergroup's whole member list per call (no incremental add/remove), so Legion becomes the
-fully authoritative source for these 7 groups' Slack membership — anyone in one who isn't
-an active, Slack-linked, matching member is removed on sync. If a usergroup would come out
-empty (nobody active matches), it's left alone rather than cleared. Usergroup IDs are
-constants in the service, same pattern as the profile field IDs. Also needs the
-**`usergroups:write`** OAuth scope on `slack_bot_token`'s Slack app, in addition to the
-profile-write scope the plain profile sync needs.
+`@students`/`@mentors`, plus the 6 team x subteam pairings — `@4143-software`,
+`@4143-design`, `@4143-business`, `@4423-software`, `@4423-design`, `@4423-business`,
+each including both students and mentors, no role filter) in sync with Legion's roster —
+distinct from Legion's own `Group` model; these are Slack's native usergroup feature,
+keyed off `Member.role`/`team_id`/`subteam_id` only, no new Legion data. Slack's
+`usergroups.users.update` **replaces** a usergroup's whole member list per call (no
+incremental add/remove), so Legion becomes the fully authoritative source for these 13
+groups' Slack membership — anyone in one who isn't an active, Slack-linked, matching
+member is removed on sync. If a usergroup would come out empty (nobody active matches),
+it's left alone rather than cleared. Usergroup IDs are constants in the service, same
+pattern as the profile field IDs. Also needs the **`usergroups:write`** OAuth scope on
+`slack_bot_token`'s Slack app, in addition to the profile-write scope the plain profile
+sync needs.
 
 Archiving a member — the manual `POST /members/{id}/delete` button, or the yearly
 Grade Increase's senior→alumni auto-archive (`/admin/members/bump-grades`) — also
@@ -361,7 +364,7 @@ triggers an immediate, best-effort `sync_all_usergroups(db)` right after the com
 (`_resync_slack_usergroups` in `routers/admin.py`), so an archived member drops out of
 every usergroup they matched without waiting on the next manual "Sync to Slack" click.
 Gated on `slack_bot_token` the same way, and never raises (archiving must not fail just
-because Slack is unreachable). It resyncs all 7 usergroups rather than only the ones
+because Slack is unreachable). It resyncs all 13 usergroups rather than only the ones
 the archived member belonged to — simpler, reuses the existing function as-is, and
 archiving isn't a hot path. Restore (`/members/{id}/restore`) does **not** get the same
 treatment — a restored member is only re-added on the next manual sync.

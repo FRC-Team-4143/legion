@@ -2,7 +2,9 @@
 Slack usergroup sync — keeps a fixed set of existing Slack *User Groups* (the
 `@handle`-style groups used for mentions/channel permissions, distinct from Legion's own
 `Group` model) populated to match Legion's roster, based purely on fields Legion already
-has: role, team, and subteam.
+has: role, team, and subteam. Includes both the single-dimension groups (`@4143`,
+`@software`, `@mentors`, ...) and the 6 team x subteam pairings (`@4143-software`, ...),
+which include both students and mentors — no role filter on those.
 
 Legion is the source of truth, so like `slack_profile.py` this is a one-way push out to
 Slack: manual-only, triggered by the same "Sync to Slack" admin button
@@ -34,6 +36,14 @@ USERGROUP_SUBTEAM_DESIGN = "S0BSQ25V11P"
 USERGROUP_ROLE_STUDENTS = "S0BSJ4HRZV3"
 USERGROUP_ROLE_MENTORS = "S0BSN4E4FPU"
 
+# team x subteam pairings — students and mentors both included (no role filter).
+USERGROUP_4143_SOFTWARE = "S0BSWF6F0TU"
+USERGROUP_4143_DESIGN = "S0BSSGQ8N93"
+USERGROUP_4143_BUSINESS = "S0BTQU47PNU"
+USERGROUP_4423_SOFTWARE = "S0BSUJNRCR4"
+USERGROUP_4423_DESIGN = "S0BSF6AE4K1"
+USERGROUP_4423_BUSINESS = "S0BSWGNSYRG"
+
 
 def _usergroup_criteria() -> dict[str, ColumnElement]:
     """Map each Slack usergroup ID to the Legion membership criterion that determines
@@ -46,6 +56,12 @@ def _usergroup_criteria() -> dict[str, ColumnElement]:
         USERGROUP_SUBTEAM_DESIGN: Member.subteam.has(Subteam.slug == "design"),
         USERGROUP_ROLE_STUDENTS: Member.role == MemberRole.student,
         USERGROUP_ROLE_MENTORS: Member.role == MemberRole.mentor,
+        USERGROUP_4143_SOFTWARE: Member.team.has(Team.number == 4143) & Member.subteam.has(Subteam.slug == "software"),
+        USERGROUP_4143_DESIGN: Member.team.has(Team.number == 4143) & Member.subteam.has(Subteam.slug == "design"),
+        USERGROUP_4143_BUSINESS: Member.team.has(Team.number == 4143) & Member.subteam.has(Subteam.slug == "business"),
+        USERGROUP_4423_SOFTWARE: Member.team.has(Team.number == 4423) & Member.subteam.has(Subteam.slug == "software"),
+        USERGROUP_4423_DESIGN: Member.team.has(Team.number == 4423) & Member.subteam.has(Subteam.slug == "design"),
+        USERGROUP_4423_BUSINESS: Member.team.has(Team.number == 4423) & Member.subteam.has(Subteam.slug == "business"),
     }
 
 
