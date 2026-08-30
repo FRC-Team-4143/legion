@@ -17,10 +17,11 @@ async def test_health_endpoint_ok(client):
 
 
 async def test_check_sibling_apps_reports_not_configured_when_no_public_url():
-    # Class defaults leave tempus_public_url / munus_public_url blank.
+    # Class defaults leave every sibling's *_public_url blank.
     results = await health_mod.check_sibling_apps()
     assert {r["name"]: r["status"] for r in results} == {
         "Tempus": "not_configured", "Munus": "not_configured",
+        "Virtus": "not_configured",
     }
 
 

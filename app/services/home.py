@@ -12,10 +12,12 @@ _APP_ICONS = {
     "Legion": "bi-shield-lock",
     "Tempus": "bi-clock-history",
     "Munus": "bi-heart",
+    "Virtus": "bi-flag",
 }
 _PERSONAL_ICONS = {
     "Tempus": "bi-stopwatch",
     "Munus": "bi-clipboard-check",
+    "Virtus": "bi-graph-up-arrow",
 }
 
 # Each app's registered Slack slash commands, paired with a short description (see each
@@ -34,6 +36,9 @@ _APP_COMMANDS: dict[str, list[tuple[str, str]]] = {
         ("/edit", "Edit a student's session (mentors)"),
         ("/gtfo", "Signs out all students (mentors)"),
         ("/qr", "Get your kiosk QR badge"),
+    ],
+    "Virtus": [
+        ("/virtus", "See your goals and any reviews you owe"),
     ],
     "Munus": [
         ("/munus", "Get a one-tap link to Munus"),
@@ -102,6 +107,25 @@ def tiles_for(identity: dict) -> list[dict]:
                 "app": "Munus", "tier": "Opportunities",
                 "url": f"{settings.munus_public_url}/opportunities", "icon": _PERSONAL_ICONS["Munus"], "kind": "personal",
             })
+
+    if settings.virtus_public_url:
+        if "virtus-admin" in groups:
+            tiles.append({
+                "app": "Virtus", "tier": "Admin",
+                "url": f"{settings.virtus_public_url}/admin", "icon": _APP_ICONS["Virtus"], "kind": "staff",
+            })
+        elif "virtus-manager" in groups:
+            tiles.append({
+                "app": "Virtus", "tier": "Manager",
+                "url": f"{settings.virtus_public_url}/admin", "icon": _APP_ICONS["Virtus"], "kind": "staff",
+            })
+        # Unconditional, like Tempus's: Virtus's personal page is open to every member.
+        # Mentors need it too — being someone's assigned reviewer is not a Legion group,
+        # so a mentor's "reviews I owe" list lives behind this tile, not the Admin one.
+        tiles.append({
+            "app": "Virtus", "tier": "Goals & Reviews",
+            "url": f"{settings.virtus_public_url}/me", "icon": _PERSONAL_ICONS["Virtus"], "kind": "personal",
+        })
 
     return tiles
 

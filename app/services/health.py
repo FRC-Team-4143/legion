@@ -56,10 +56,11 @@ async def _check_one(name: str, interact_url: str, public_url: str) -> dict:
 
 
 async def check_sibling_apps() -> list[dict]:
-    """Ping Tempus & Munus's /health endpoints concurrently. An app whose
+    """Ping the sibling apps' /health endpoints concurrently. An app whose
     *_public_url isn't configured is reported "not_configured" rather than pinged."""
     apps = [
         ("Tempus", settings.tempus_interact_url, settings.tempus_public_url),
         ("Munus", settings.munus_interact_url, settings.munus_public_url),
+        ("Virtus", settings.virtus_interact_url, settings.virtus_public_url),
     ]
     return list(await asyncio.gather(*(_check_one(*a) for a in apps)))

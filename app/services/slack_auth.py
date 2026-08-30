@@ -39,6 +39,7 @@ def get_auth_slack_client() -> AsyncWebClient:
 _APP_LABELS = {
     "tempus": "Tempus (attendance)",
     "munus": "Munus (volunteer hours)",
+    "virtus": "Virtus (goals / reviews)",
     "legion": "Legion (roster / SSO)",
 }
 

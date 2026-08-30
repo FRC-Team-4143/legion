@@ -26,9 +26,12 @@ router = APIRouter(prefix="/api")
 
 async def require_api_key(x_api_key: str = Header(default="")) -> None:
     """Dependency: reject requests without a configured, matching API key. Each
-    consumer (Tempus, Munus) has its own key — either is accepted here, so a leak
-    or rotation of one never affects the other."""
-    keys = [k for k in (settings.tempus_api_key, settings.munus_api_key) if k]
+    consumer (Tempus, Munus, Virtus) has its own key — any is accepted here, so a leak
+    or rotation of one never affects the others."""
+    keys = [
+        k for k in (settings.tempus_api_key, settings.munus_api_key, settings.virtus_api_key)
+        if k
+    ]
     if not keys:
         raise HTTPException(status_code=503, detail="API is not configured (no API key set).")
     if not any(hmac.compare_digest(x_api_key, k) for k in keys):
