@@ -13,11 +13,13 @@ _APP_ICONS = {
     "Tempus": "bi-clock-history",
     "Munus": "bi-heart",
     "Virtus": "bi-flag",
+    "Merces": "bi-gift",
 }
 _PERSONAL_ICONS = {
     "Tempus": "bi-stopwatch",
     "Munus": "bi-clipboard-check",
     "Virtus": "bi-graph-up-arrow",
+    "Merces": "bi-coin",
 }
 
 # Each app's registered Slack slash commands, paired with a short description (see each
@@ -43,6 +45,9 @@ _APP_COMMANDS: dict[str, list[tuple[str, str]]] = {
     "Munus": [
         ("/munus", "Get a one-tap link to Munus"),
         ("/vhours", "Check your volunteer hours"),
+    ],
+    "Merces": [
+        ("/merces", "Check your balance and open the rewards store"),
     ],
 }
 
@@ -126,6 +131,26 @@ def tiles_for(identity: dict) -> list[dict]:
             "app": "Virtus", "tier": "Goals & Reviews",
             "url": f"{settings.virtus_public_url}/me", "icon": _PERSONAL_ICONS["Virtus"], "kind": "personal",
         })
+
+    if settings.merces_public_url:
+        if "merces-admin" in groups:
+            tiles.append({
+                "app": "Merces", "tier": "Admin",
+                "url": f"{settings.merces_public_url}/admin", "icon": _APP_ICONS["Merces"], "kind": "staff",
+            })
+        elif "merces-manager" in groups:
+            tiles.append({
+                "app": "Merces", "tier": "Manager",
+                "url": f"{settings.merces_public_url}/admin", "icon": _APP_ICONS["Merces"], "kind": "staff",
+            })
+        # Student-only, like Munus's: Merces's personal page is a student's rewards
+        # balance + store. Mentors are staff here, not balance holders, so they get the
+        # Admin tile (if in a group) and no personal one.
+        if role == "student":
+            tiles.append({
+                "app": "Merces", "tier": "My Balance",
+                "url": f"{settings.merces_public_url}/me", "icon": _PERSONAL_ICONS["Merces"], "kind": "personal",
+            })
 
     return tiles
 

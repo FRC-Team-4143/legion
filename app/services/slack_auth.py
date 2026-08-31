@@ -40,6 +40,7 @@ _APP_LABELS = {
     "tempus": "Tempus (attendance)",
     "munus": "Munus (volunteer hours)",
     "virtus": "Virtus (goals / reviews)",
+    "merces": "Merces (student rewards)",
     "legion": "Legion (roster / SSO)",
 }
 

@@ -21,7 +21,7 @@ async def test_check_sibling_apps_reports_not_configured_when_no_public_url():
     results = await health_mod.check_sibling_apps()
     assert {r["name"]: r["status"] for r in results} == {
         "Tempus": "not_configured", "Munus": "not_configured",
-        "Virtus": "not_configured",
+        "Virtus": "not_configured", "Merces": "not_configured",
     }
 
 

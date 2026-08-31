@@ -18,14 +18,15 @@ class Settings(BaseSettings):
     admin_password: str
     session_secret: str
 
-    # Per-consumer secrets Tempus / Munus / Virtus each present (as the `X-API-Key` header) to
-    # read the member roster from the JSON API and to hit /sso/challenge. Separate
+    # Per-consumer secrets Tempus / Munus / Virtus / Merces each present (as the `X-API-Key`
+    # header) to read the member roster from the JSON API and to hit /sso/challenge. Separate
     # keys so a leak from one app's .env doesn't expose the other's, and either can be
     # rotated independently. Both blank = the API is disabled (returns 503), so a
     # misconfigured deploy fails closed rather than serving data to anyone.
     tempus_api_key: str = ""
     munus_api_key: str = ""
     virtus_api_key: str = ""
+    merces_api_key: str = ""
 
     database_url: str = "sqlite+aiosqlite:///./legion.db"
 
@@ -122,6 +123,8 @@ class Settings(BaseSettings):
     # dispatched to this URL — it exists only so `services/health.py` can derive Virtus's
     # internal address the same way it does for the other siblings.
     virtus_interact_url: str = "http://virtus:8006/slack/interact"
+    # Merces likewise registers no interactive components — same rationale as Virtus above.
+    merces_interact_url: str = "http://merces:8004/slack/interact"
 
     # ── Home page app launcher ──────────────────────────────────────────────────
     # Public URLs for the sibling apps' tiles on Legion's signed-in home page ("/").
@@ -131,6 +134,7 @@ class Settings(BaseSettings):
     tempus_public_url: str = ""
     munus_public_url: str = ""
     virtus_public_url: str = ""
+    merces_public_url: str = ""
 
     @field_validator("admin_password", "session_secret", "sso_secret")
     @classmethod

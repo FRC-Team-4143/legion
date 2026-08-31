@@ -7,3 +7,6 @@ venv/
 *.db-wal
 .pytest_cache/
 backups/
+.env.bak*
+.env.*
+!.env.example

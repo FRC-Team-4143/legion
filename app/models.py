@@ -94,6 +94,8 @@ DEFAULT_GROUPS: list[tuple[str, str]] = [
     ("munus-manager", "Munus Manager"),
     ("virtus-admin", "Virtus Admin"),
     ("virtus-manager", "Virtus Manager"),
+    ("merces-admin", "Merces Admin"),
+    ("merces-manager", "Merces Manager"),
 ]
 
 
