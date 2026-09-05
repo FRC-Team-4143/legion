@@ -34,6 +34,20 @@ async def test_sso_admin_can_access_dashboard(client, db, make_member):
     assert resp.status_code == 200
 
 
+async def test_magic_link_identity_is_sent_to_stepup(client, db, make_member):
+    """A `via="link"` cookie carries no groups by construction — bounce it to the step-up
+    flow (fresh Approve/Deny, re-mint with groups), not a dead-end 403."""
+    from app.services.sso import make_link_sso_token
+
+    member = await make_member(name="Ada Lovelace", groups=["legion-admin"])
+    member = await _loaded(db, member.id)
+    client.cookies.set("mw_sso", make_link_sso_token(member, "link"))
+
+    resp = await client.get("/admin", follow_redirects=False)
+    assert resp.status_code == 303
+    assert "/sso/stepup" in resp.headers["location"]
+
+
 async def test_sso_non_admin_gets_forbidden(client, db, make_member):
     # In a group, but not legion-admin — a valid SSO identity with no Legion access.
     member = await make_member(name="Grace Hopper", groups=["munus-admin"])

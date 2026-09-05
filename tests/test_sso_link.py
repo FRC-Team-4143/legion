@@ -78,9 +78,11 @@ async def test_admin_refuses_a_link_minted_cookie_and_sends_it_to_sign_in(client
         "/admin", cookies={"mw_sso": redeemed.cookies["mw_sso"]}, follow_redirects=False
     )
 
-    # Step-up to a real sign-in, not a dead-end 403 — the member really is an admin.
+    # Step-up, not a dead-end 403 — the member really is an admin. `/sso/stepup` fires a
+    # fresh Approve/Deny and re-mints the cookie with groups (a plain `/sso/authorize`
+    # would just bounce the link cookie straight back and loop).
     assert resp.status_code == 303
-    assert "/sso/authorize" in resp.headers["location"]
+    assert "/sso/stepup" in resp.headers["location"]
 
 
 async def test_link_for_archived_member_is_rejected(client, make_member):

@@ -40,12 +40,33 @@
     .empty-state { background: #111111; border: 1px solid #2a1a1a; border-radius: 10px; padding: 2rem; text-align: center; }
     .signout-link { color: #9a7878; }
     .signout-link:hover { color: #e05540; }
+    .stepup {
+      background: #1a0f0f; border: 1px solid rgba(204, 34, 0, 0.4); border-radius: 10px;
+      padding: 1rem 1.25rem; margin-bottom: 1.5rem;
+      display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+    }
+    .stepup .stepup-text { color: #9a7878; font-size: 0.9rem; flex: 1 1 260px; }
+    .stepup .btn {
+      --bs-btn-color: #f0e8e8; --bs-btn-border-color: #cc2200;
+      --bs-btn-hover-bg: #cc2200; --bs-btn-hover-border-color: #cc2200; --bs-btn-hover-color: #fff;
+    }
   </style>
 </head>
 <body>
   <div class="page-wrap">
     <h1 class="mb-1">Hi, {{ name }}!</h1>
     <p class="text-muted mb-4">Your MARS/WARS apps</p>
+
+    {% if magic_link %}
+    <div class="stepup">
+      <span class="stepup-text">
+        You opened this from a Slack quick link, so you're in limited mode — admin tools are hidden.
+      </span>
+      <a class="btn btn-outline-primary btn-sm" href="/sso/stepup?app=legion&return_to=%2F">
+        <i class="bi bi-shield-lock me-1"></i>Switch to full access
+      </a>
+    </div>
+    {% endif %}
 
     {% set personal_tiles = tiles | selectattr('kind', 'equalto', 'personal') | list %}
     {% set staff_tiles = tiles | selectattr('kind', 'equalto', 'staff') | list %}

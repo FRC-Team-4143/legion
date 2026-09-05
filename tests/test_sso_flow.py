@@ -38,6 +38,31 @@ async def test_authorize_get_short_circuits_when_already_signed_in(client, db, m
     assert resp.headers["location"] == "/dash"
 
 
+async def test_authorize_get_does_not_short_circuit_a_magic_link_identity(client, db, make_member):
+    """A `via="link"` cookie is non-privileged, so `/sso/authorize` must NOT treat it as
+    "already signed in" and bounce it back — it renders the form (and `/sso/stepup` is
+    the real upgrade path). Short-circuiting here would loop against the admin gates,
+    which redirect a link identity to sign-in."""
+    from app.services.sso import make_link_sso_token
+    from sqlalchemy.orm import selectinload
+    from app.models import Member
+
+    member = await make_member(name="Ada Lovelace")
+    member = (
+        await db.execute(
+            select(Member)
+            .options(selectinload(Member.team), selectinload(Member.groups))
+            .where(Member.id == member.id)
+        )
+    ).scalars().first()
+    client.cookies.set("mw_sso", make_link_sso_token(member, "link"))
+
+    resp = await client.get(
+        "/sso/authorize", params={"return_to": "/dash"}, follow_redirects=False
+    )
+    assert resp.status_code == 200
+
+
 async def test_authorize_post_unknown_username_is_indistinguishable(client):
     resp = await client.post(
         "/sso/authorize",
