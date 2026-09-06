@@ -58,5 +58,8 @@ async def root(request: Request):
         {
             "request": request, "name": identity.get("name", ""),
             "tiles": tiles, "commands": commands_for(tiles),
+            # A magic-link session carries no groups, so `tiles_for` shows no Admin
+            # Tools here — offer a one-tap step-up instead of a dead end.
+            "magic_link": identity.get("via") == "link",
         },
     )

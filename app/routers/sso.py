@@ -19,6 +19,7 @@ completion is identical either way.
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -87,8 +88,13 @@ async def _dispatch_challenge(member_id: int, nonce: str, app: str) -> None:
 async def sso_authorize_get(request: Request, app: str = "", return_to: str = "/", state: str = ""):
     target = allowed_return_to(return_to) or "/"
 
-    # Already signed in — real SSO, no prompt needed.
-    if sso_identity(request):
+    # Already signed in *strongly* — real SSO, no prompt needed. A magic-link identity
+    # (`via="link"`) is deliberately non-privileged, so it must NOT short-circuit here:
+    # that would bounce it straight back to `return_to` still groupless, and — since the
+    # admin gates redirect a link identity here — loop. Let it fall through to the form
+    # (or reach `/sso/stepup`, which fires a real challenge and upgrades the cookie).
+    identity = sso_identity(request)
+    if identity and identity.get("via") != "link":
         return RedirectResponse(_append_state(target, state), status_code=303)
 
     response = templates.TemplateResponse(
@@ -209,6 +215,98 @@ async def sso_challenge(
     await db.commit()
 
     return {"nonce": nonce, "expires_at": auth_request.expires_at.isoformat()}
+
+
+def _authorize_redirect(app: str, target: str, state: str) -> RedirectResponse:
+    """303 to the ordinary username-entry form, carrying app/return_to/state across."""
+    url = f"/sso/authorize?app={quote(app, safe='')}&return_to={quote(target, safe='')}"
+    if state:
+        url += f"&state={quote(state, safe='')}"
+    return RedirectResponse(url, status_code=303)
+
+
+@router.get("/stepup", response_class=HTMLResponse)
+async def sso_stepup(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    app: str = "",
+    return_to: str = "/",
+    state: str = "",
+    db: AsyncSession = Depends(get_db),
+):
+    """Step a *magic-link* session up to a full one — re-mint `mw_sso` WITH groups via a
+    fresh Slack Approve/Deny, without a sign-out first.
+
+    A link-borne cookie carries `groups: []` and `via: "link"` by construction
+    (`services/sso.make_link_sso_token`), so an admin who arrived from a Slack quick link
+    can't reach any app's `/admin`. This is the browser-session sibling of
+    `POST /sso/challenge`: the link cookie already names the member (and Slack already
+    authenticated them to mint it), so there's no username form and no API key — just
+    fire the challenge and reuse the ordinary `/sso/pending` -> `/sso/complete` tail,
+    which mints a full cookie and lands them back on `return_to`.
+
+    Anything other than a link identity is a no-op: an already-strong session just
+    redirects to `return_to`; no session at all falls back to the normal sign-in form.
+    """
+    target = allowed_return_to(return_to) or "/"
+    identity = sso_identity(request)
+
+    if not identity:
+        return _authorize_redirect(app, target, state)
+    if identity.get("via") != "link":
+        return RedirectResponse(_append_state(target, state), status_code=303)
+
+    device_id = get_device_id(request)
+    member = (
+        await db.execute(
+            select(Member).where(
+                Member.member_code == identity.get("member_code"),
+                Member.is_active.is_(True),
+            )
+        )
+    ).scalars().first()
+    if member is None or not member.slack_user_id:
+        # The link names someone since deactivated or unlinked from Slack — there's no
+        # one to send an Approve/Deny to. Fall back to the ordinary form.
+        return _authorize_redirect(app, target, state)
+
+    retry_after = await throttle.check_and_record(db, device_id, member.id)
+    if retry_after is not None:
+        page = templates.TemplateResponse(
+            "sso/login.html",
+            {
+                "request": request, "app": app, "return_to": target, "state": state,
+                "error": f"Too many attempts. Try again in {retry_after}s.",
+            },
+            status_code=429,
+        )
+        set_device_cookie(page, device_id)
+        return page
+
+    nonce = secrets.token_urlsafe(_NONCE_BYTES)
+    auth_request = AuthRequest(
+        nonce=nonce,
+        member_id=member.id,
+        app=app or None,
+        return_to=target,
+        state=state or None,
+        device_id=device_id,
+        ip=_client_ip(request),
+        status=AuthStatus.pending,
+        expires_at=datetime.utcnow() + timedelta(seconds=settings.sso_challenge_ttl),
+    )
+    db.add(auth_request)
+    await db.commit()
+
+    # Off the request path, same as the form flow — see `_dispatch_challenge`.
+    background_tasks.add_task(_dispatch_challenge, member.id, nonce, app)
+
+    page = templates.TemplateResponse(
+        "sso/pending.html",
+        {"request": request, "nonce": nonce, "challenge_ttl": settings.sso_challenge_ttl},
+    )
+    set_device_cookie(page, device_id)
+    return page
 
 
 @router.get("/pending/{nonce}", response_class=HTMLResponse)
