@@ -107,7 +107,7 @@
           <td data-value="{{ m.graduation_year or '' }}">{{ m.graduation_year or '—' }}</td>
         </tr>
         <div class="modal fade" id="memberDetail{{ m.id }}" tabindex="-1">
-          <div class="modal-dialog modal-dialog-scrollable"><div class="modal-content">
+          <div class="modal-dialog modal-dialog-scrollable modal-fullscreen-sm-down"><div class="modal-content">
             <div class="modal-header">
               <h5 class="modal-title">{{ m.name }}{% if not m.is_active %} <span class="badge bg-secondary">Archived</span>{% endif %}</h5>
               <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -170,7 +170,7 @@
           </div></div>
         </div>
         <div class="modal fade" id="memberEdit{{ m.id }}" tabindex="-1">
-          <div class="modal-dialog modal-dialog-scrollable"><div class="modal-content">
+          <div class="modal-dialog modal-dialog-scrollable modal-fullscreen-sm-down"><div class="modal-content">
             <div class="modal-header">
               <h5 class="modal-title">Edit {{ m.name }}</h5>
               <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -256,7 +256,7 @@
 
 <!-- Add Member Modal -->
 <div class="modal fade" id="addModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-scrollable">
+  <div class="modal-dialog modal-dialog-scrollable modal-fullscreen-sm-down">
     <div class="modal-content">
       <form method="post" action="/admin/members">
         <div class="modal-header"><h5 class="modal-title">Add Member</h5></div>
