@@ -6,6 +6,7 @@
 <style>
   .fs-th { white-space: nowrap; }
   .fs-th .th-inner { gap: .35rem; }
+  .fs-count { font-weight: 400; letter-spacing: 0; text-transform: none; opacity: .6; }
   .sort-icon { font-size: .75rem; cursor: pointer; }
   .table-responsive { min-height: 360px; }
   .filter-funnel-btn {
@@ -73,8 +74,8 @@
     <table class="table table-hover mb-0 align-middle" data-filter-sort>
       <thead class="table-light">
         <tr>
-          <th class="fs-th" data-col="name" data-sortable="true" data-sort-type="text" data-filter="none">
-            <span class="th-inner d-inline-flex align-items-center"><span class="th-label">Name</span></span>
+          <th class="fs-th" data-col="name" data-sortable="true" data-sort-type="text" data-filter="none" data-count="true">
+            <span class="th-inner d-inline-flex align-items-center"><span class="th-label">Name</span><span class="fs-count" title="Rows matching the current filters">({{ members|length }})</span></span>
           </th>
           <th class="fs-th" data-col="role">
             <span class="th-inner d-inline-flex align-items-center"><span class="th-label">Role</span></span>

@@ -2,8 +2,10 @@
  * Excel-style column filtering + sorting for admin tables. No dependencies beyond
  * Bootstrap 5 (dropdown component + bundled Popper) which every admin page already
  * loads. Opt a table in with `data-filter-sort`; declare columns via `data-col` on
- * `<th>` and `data-value`/`data-label` on the matching `<td>`. See CLAUDE.md / the
- * members page for the full markup contract.
+ * `<th>` and `data-value`/`data-label` on the matching `<td>`. A `<th>` marked
+ * `data-count="true"` gets its `.fs-count` element kept in sync with the number of
+ * rows currently passing all filters. See CLAUDE.md / the members page for the full
+ * markup contract.
  */
 (function () {
   'use strict';
@@ -128,6 +130,10 @@
 
       th.classList.add('fs-th');
       var inner = th.querySelector('.th-inner') || th;
+
+      if (th.getAttribute('data-count') === 'true') {
+        self.countEl = inner.querySelector('.fs-count');
+      }
 
       if (sortable) {
         var caret = document.createElement('i');
@@ -371,6 +377,10 @@
       tr.classList.toggle('d-none', !visible);
       if (visible) visibleCount++;
     });
+
+    if (this.countEl) {
+      this.countEl.textContent = '(' + visibleCount + ')';
+    }
 
     if (this.sortState) {
       var sortKey = this.sortState.key;
