@@ -42,6 +42,18 @@ async def test_consumer_keys_are_independent(client, make_member):
         settings.tempus_api_key, settings.munus_api_key = original
 
 
+async def test_colosseum_key_is_accepted(client, make_member):
+    from app.config import settings
+    original = settings.colosseum_api_key
+    try:
+        settings.colosseum_api_key = "colosseum-key"
+        await make_member(name="Alice")
+        resp = await client.get("/api/members", headers={"X-API-Key": "colosseum-key"})
+        assert resp.status_code == 200
+    finally:
+        settings.colosseum_api_key = original
+
+
 async def test_list_members_ok(client, api_key, make_member):
     await make_member(name="Alice", role=MemberRole.student)
     await make_member(name="Bob", role=MemberRole.mentor, slack="U0BOB")

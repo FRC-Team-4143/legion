@@ -50,6 +50,22 @@ def test_tempus_tiles_require_configured_public_url():
         settings.tempus_public_url = original
 
 
+def test_colosseum_tile_for_any_member_with_a_team():
+    original = settings.colosseum_public_url
+    try:
+        settings.colosseum_public_url = ""
+        assert tiles_for({"groups": [], "role": "student", "team_number": 4143}) == []
+
+        settings.colosseum_public_url = "https://colosseum.example.org"
+        tile = {"app": "Colosseum", "tier": "Scouting", "url": "https://colosseum.example.org", "icon": "bi-binoculars", "kind": "personal"}
+        for role in ("student", "mentor"):
+            assert tiles_for({"groups": [], "role": role, "team_number": 4423}) == [tile]
+        # No team_number means Colosseum would refuse them, so no tile.
+        assert tiles_for({"groups": [], "role": "mentor"}) == []
+    finally:
+        settings.colosseum_public_url = original
+
+
 def test_tempus_manager_tile():
     original = settings.tempus_public_url
     try:
