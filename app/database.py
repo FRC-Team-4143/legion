@@ -47,6 +47,8 @@ async def init_db() -> None:
         # Drop the retired "remember this browser" feature's column + table.
         await conn.run_sync(_migration_drop_authrequest_remember)
         await conn.run_sync(_migration_drop_remembered_browsers_table)
+        # Alumni tracking moved to the Alumni app — see the function's own docstring.
+        await conn.run_sync(_migration_retire_alumni_tracking)
 
     await _seed_teams()
     await _seed_subteams()
@@ -164,6 +166,36 @@ def _migration_drop_remembered_browsers_table(conn) -> None:
     from sqlalchemy import text
 
     conn.execute(text("DROP TABLE IF EXISTS remembered_browsers"))
+
+
+def _migration_retire_alumni_tracking(conn) -> None:
+    """Alumni tracking moved out of Legion entirely, to a new sibling app (see
+    services/alumni_push.py). Three things fall out of that:
+
+    1. Any existing `grade='alumni'` row is rewritten to `'senior'` — their last true
+       grade before the StudentGrade enum stopped accepting "alumni" as a value. SQLite
+       enforces no CHECK constraint on this column (confirmed against a real `members`
+       table's CREATE TABLE SQL — SQLAlchemy's SAEnum doesn't add one here), so this is
+       a plain data fix, not a schema change; skipping it would leave a value the
+       Python enum can no longer deserialize, breaking every read of that row.
+    2. `graduation_year` is dropped from `members` — the Alumni app is the only thing
+       that tracks it now.
+    3. `graduation_surveys` is dropped entirely — survey answers live in the Alumni app.
+
+    IMPORTANT: run the Alumni repo's scripts/migrate_from_legion.py against this
+    database BEFORE this migration ships in production, or any existing alumni /
+    graduation_surveys rows are lost — neither was ever exposed on Legion's HTTP API
+    (grade='alumni' was, but survey answers never were), so that script reads this
+    SQLite file directly. No-op on a database with no existing alumni data.
+    """
+    from sqlalchemy import inspect, text
+
+    if "members" in inspect(conn).get_table_names():
+        conn.execute(text("UPDATE members SET grade = 'senior' WHERE grade = 'alumni'"))
+        cols = {c["name"] for c in inspect(conn).get_columns("members")}
+        if "graduation_year" in cols:
+            conn.execute(text("ALTER TABLE members DROP COLUMN graduation_year"))
+    conn.execute(text("DROP TABLE IF EXISTS graduation_surveys"))
 
 
 async def _seed_teams() -> None:

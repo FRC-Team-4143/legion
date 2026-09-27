@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import select
 
+from app.config import settings
 from app.models import Member, MemberRole, StudentGrade, Team
 
 
@@ -20,7 +21,6 @@ async def test_bump_advances_and_graduates(client, db, make_member):
     await make_member(name="Frosh", grade=StudentGrade.freshman)
     await make_member(name="Junior Jim", grade=StudentGrade.junior)
     await make_member(name="Senior Sue", grade=StudentGrade.senior, slack="U0SUE")
-    await make_member(name="Old Grad", grade=StudentGrade.alumni)
     await make_member(name="No Grade")  # grade is None
     await make_member(name="Coach", role=MemberRole.mentor, grade=StudentGrade.junior)
 
@@ -32,22 +32,79 @@ async def test_bump_advances_and_graduates(client, db, make_member):
     assert (await _get(db, "Frosh")).grade == StudentGrade.sophomore
     assert (await _get(db, "Junior Jim")).grade == StudentGrade.senior
 
-    # A senior graduates to alumni AND is archived AND gets graduation_year set.
+    # A senior is archived — Legion keeps no "alumni" grade or graduation year of its
+    # own anymore (see services/alumni_push.py); their grade simply stays `senior`.
     sue = await _get(db, "Senior Sue")
-    assert sue.grade == StudentGrade.alumni
+    assert sue.grade == StudentGrade.senior
     assert sue.is_active is False
-    assert sue.graduation_year == datetime.utcnow().year
-
-    # Already-alumni are left alone (and stay active) — including graduation_year,
-    # which is deliberately NOT auto-backfilled for alumni who predate this field.
-    grad = await _get(db, "Old Grad")
-    assert grad.grade == StudentGrade.alumni
-    assert grad.is_active is True
-    assert grad.graduation_year is None
+    assert sue.archived_at is not None
 
     # Grade-less students and mentors are untouched.
     assert (await _get(db, "No Grade")).grade is None
     assert (await _get(db, "Coach")).grade == StudentGrade.junior
+
+
+async def test_bump_pushes_graduating_seniors_to_alumni(client, db, make_member, monkeypatch):
+    """A graduating senior is pushed to the Alumni app's intake endpoint with their
+    identity, team/subteam, and this calendar year as their graduation year."""
+    from app.services import alumni_push
+
+    settings.alumni_base_url = "http://alumni.internal"
+    settings.alumni_push_api_key = "test-push-key"
+
+    calls = []
+
+    class _FakeResponse:
+        status_code = 200
+        def raise_for_status(self):
+            pass
+
+    async def _fake_post(url, json=None, headers=None):
+        calls.append({"url": url, "json": json, "headers": headers})
+        return _FakeResponse()
+
+    monkeypatch.setattr(alumni_push._client, "post", _fake_post)
+
+    await make_member(name="Senior Sue", grade=StudentGrade.senior, slack="U0SUE", team_number=4143)
+
+    await _login(client)
+    resp = await client.post("/admin/members/bump-grades")
+    assert resp.status_code in (302, 303)
+
+    assert len(calls) == 1
+    call = calls[0]
+    assert call["url"] == "http://alumni.internal/api/graduates"
+    assert call["headers"]["X-API-Key"] == "test-push-key"
+    assert call["json"]["name"] == "Senior Sue"
+    assert call["json"]["slack_user_id"] == "U0SUE"
+    assert call["json"]["team_number"] == 4143
+    assert call["json"]["graduation_year"] == datetime.utcnow().year
+
+    location = resp.headers.get("location", "")
+    assert "1 pushed to Alumni" in location.replace("%20", " ")
+
+
+async def test_bump_reports_failed_alumni_push(client, db, make_member, monkeypatch):
+    """Alumni unreachable/unconfigured must not fail the bump-grades request itself —
+    the archive already committed, so the failure is only reported in the summary."""
+    from app.services import alumni_push
+
+    # alumni_base_url/alumni_push_api_key are blank by default (reset by the autouse
+    # settings fixture) — notify_alumni short-circuits to False without a network call.
+    await make_member(name="Senior Sue", grade=StudentGrade.senior, slack="U0SUE")
+
+    await _login(client)
+    resp = await client.post("/admin/members/bump-grades")
+    assert resp.status_code in (302, 303)
+
+    sue = await _get(db, "Senior Sue")
+    assert sue.is_active is False  # the archive still happened
+
+    from urllib.parse import unquote
+    location = resp.headers.get("location", "")
+    msg = unquote(location)
+    assert "1 pushed to Alumni, 0 failed" not in msg  # sanity: not silently "succeeded"
+    assert "0 pushed to Alumni, 1 failed" in msg
 
 
 async def test_bump_requires_auth(client, db, make_member):

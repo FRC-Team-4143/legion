@@ -52,6 +52,14 @@ def test_routes_legion_action_ids():
     assert resolve_target(_block_action("sso_deny")) == settings.legion_interact_url
 
 
+def test_grad_survey_action_ids_no_longer_route_anywhere():
+    """The graduation survey moved to the Alumni app, which registers no interactive
+    components at all (its survey is a plain web form) — these ids must never come
+    back into the dispatch tables, or Legion's own dead handler-removal silently breaks."""
+    assert resolve_target(_block_action("grad_survey_start")) is None
+    assert resolve_target(_view_submission("grad_survey_submit")) is None
+
+
 def test_unknown_action_id_has_no_target():
     assert resolve_target(_block_action("something_new")) is None
 

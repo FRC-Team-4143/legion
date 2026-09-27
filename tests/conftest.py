@@ -98,7 +98,6 @@ async def make_member(db):
         grade: StudentGrade | None = None,
         parent_guardian_1: str | None = None,
         parent_guardian_2: str | None = None,
-        graduation_year: int | None = None,
         years_on_team: int = 0,
     ) -> Member:
         team_id = None
@@ -127,7 +126,6 @@ async def make_member(db):
             grade=grade,
             parent_guardian_1=parent_guardian_1,
             parent_guardian_2=parent_guardian_2,
-            graduation_year=graduation_year,
             years_on_team=years_on_team,
         )
         db.add(m)

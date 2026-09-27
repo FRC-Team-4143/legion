@@ -24,6 +24,7 @@ async def test_check_sibling_apps_reports_not_configured_when_no_public_url():
         "Virtus": "not_configured", "Merces": "not_configured",
         "Colosseum": "not_configured",
         "Scriptum": "not_configured",
+        "Alumni": "not_configured",
     }
 
 

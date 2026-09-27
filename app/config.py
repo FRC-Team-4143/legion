@@ -29,6 +29,17 @@ class Settings(BaseSettings):
     merces_api_key: str = ""
     colosseum_api_key: str = ""
 
+    # Outbound: the shared secret Legion presents (as `X-API-Key`) when it pushes a
+    # graduation event to the Alumni app's POST /api/graduates. This is the reverse of
+    # the keys above — every other app *pulls* the roster from Legion and authenticates
+    # itself to Legion; Alumni never pulls anything, so there's nothing for it to add to
+    # `routers/api.py`'s consumer key list. Blank = the push is skipped (logged, not
+    # fatal — see services/alumni_push.py).
+    alumni_push_api_key: str = ""
+    # Where to send that push. Internal Docker-network address in production
+    # (http://alumni:8003), matching the *_interact_url convention below.
+    alumni_base_url: str = ""
+
     database_url: str = "sqlite+aiosqlite:///./legion.db"
 
     timezone: str = "America/New_York"
@@ -131,6 +142,10 @@ class Settings(BaseSettings):
     # Scriptum has no Slack components either; this exists only so services/health.py
     # can derive its internal address (the apps-infra service is `scriptum`, port 4000).
     scriptum_interact_url: str = "http://scriptum:4000/slack/interact"
+    # Alumni registers no interactive components either (its survey is a plain web form,
+    # not a Slack modal) — same rationale as Virtus/Merces above; exists only for
+    # services/health.py's internal-address derivation.
+    alumni_interact_url: str = "http://alumni:8003/slack/interact"
 
     # ── Home page app launcher ──────────────────────────────────────────────────
     # Public URLs for the sibling apps' tiles on Legion's signed-in home page ("/").
@@ -143,6 +158,7 @@ class Settings(BaseSettings):
     merces_public_url: str = ""
     colosseum_public_url: str = ""
     scriptum_public_url: str = ""
+    alumni_public_url: str = ""
 
     @field_validator("admin_password", "session_secret", "sso_secret")
     @classmethod
