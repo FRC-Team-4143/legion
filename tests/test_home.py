@@ -74,13 +74,14 @@ def test_scriptum_tiles():
 
         settings.scriptum_public_url = "https://scriptum.example.org"
         coding = {"app": "Scriptum", "tier": "Coding", "url": "https://scriptum.example.org/", "icon": "bi-code-slash", "kind": "personal"}
-        # Every signed-in member gets a workspace, whatever their role or groups.
-        assert tiles_for(_identity(role="student")) == [coding]
-        assert tiles_for(_identity(role="mentor")) == [coding]
-        assert tiles_for(_identity(groups=["scriptum-admin"])) == [
-            {"app": "Scriptum", "tier": "Admin", "url": "https://scriptum.example.org/admin/", "icon": "bi-code-slash", "kind": "staff"},
-            coding,
-        ]
+        admin = {"app": "Scriptum", "tier": "Admin", "url": "https://scriptum.example.org/admin/", "icon": "bi-code-slash", "kind": "staff"}
+        # Invitation-only: no Coding tile without scriptum-user, whatever the role.
+        assert tiles_for(_identity(role="student")) == []
+        assert tiles_for(_identity(role="mentor")) == []
+        assert tiles_for(_identity(groups=["scriptum-user"], role="student")) == [coding]
+        # scriptum-admin doesn't imply a workspace; it's granted separately.
+        assert tiles_for(_identity(groups=["scriptum-admin"])) == [admin]
+        assert tiles_for(_identity(groups=["scriptum-admin", "scriptum-user"])) == [admin, coding]
     finally:
         settings.scriptum_public_url = original
 

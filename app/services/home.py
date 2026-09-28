@@ -160,18 +160,20 @@ def tiles_for(identity: dict) -> list[dict]:
             "url": settings.colosseum_public_url, "icon": _APP_ICONS["Colosseum"], "kind": "personal",
         })
 
-    # Scriptum gives every signed-in member their own coding workspace (its "/" sends
-    # them straight to it), so the personal tile isn't role- or group-gated.
+    # Scriptum is invitation-only: each workspace runs on a paid worker droplet, so a
+    # member needs `scriptum-user` (granted by hand; scriptum-admin doesn't imply it) for
+    # the Coding tile, and Scriptum itself refuses everyone else.
     if settings.scriptum_public_url:
         if "scriptum-admin" in groups:
             tiles.append({
                 "app": "Scriptum", "tier": "Admin",
                 "url": f"{settings.scriptum_public_url}/admin/", "icon": _APP_ICONS["Scriptum"], "kind": "staff",
             })
-        tiles.append({
-            "app": "Scriptum", "tier": "Coding",
-            "url": f"{settings.scriptum_public_url}/", "icon": _APP_ICONS["Scriptum"], "kind": "personal",
-        })
+        if "scriptum-user" in groups:
+            tiles.append({
+                "app": "Scriptum", "tier": "Coding",
+                "url": f"{settings.scriptum_public_url}/", "icon": _APP_ICONS["Scriptum"], "kind": "personal",
+            })
 
     if settings.alumni_public_url:
         # Staff-only — Alumni has no personal tile here, since the people it's about are
