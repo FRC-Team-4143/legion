@@ -31,13 +31,18 @@ def role_label(role: Optional[MemberRole]) -> str:
 class StudentGrade(str, enum.Enum):
     """A student's school year. Fixed, ordered, and not admin-editable (unlike subteams
     / teams), so it lives in an enum like MemberRole rather than a data table.
-    Mentors never have a grade. The order below also drives the yearly grade bump."""
+    Mentors never have a grade. The order below also drives the yearly grade bump.
+
+    There is deliberately no terminal "alumni" value: Legion tracks active students
+    only. The yearly bump archives a senior (and pushes a one-time graduation event to
+    the Alumni app — see services/alumni_push.py) rather than advancing them to a
+    further grade; their `grade` simply stays `senior`, same as anyone else who's
+    archived mid-grade."""
     junior_high = "junior_high"
     freshman = "freshman"
     sophomore = "sophomore"
     junior = "junior"
     senior = "senior"
-    alumni = "alumni"
 
 
 GRADE_LABELS: dict[StudentGrade, str] = {
@@ -46,18 +51,16 @@ GRADE_LABELS: dict[StudentGrade, str] = {
     StudentGrade.sophomore: "Sophomore",
     StudentGrade.junior: "Junior",
     StudentGrade.senior: "Senior",
-    StudentGrade.alumni: "Alumni",
 }
 
 # The grade progression, low → high. The yearly bump advances each student to the next
-# entry; a senior graduates to alumni (and is archived).
+# entry; a senior is archived instead of advanced further (see StudentGrade's docstring).
 GRADE_ORDER: list[StudentGrade] = [
     StudentGrade.junior_high,
     StudentGrade.freshman,
     StudentGrade.sophomore,
     StudentGrade.junior,
     StudentGrade.senior,
-    StudentGrade.alumni,
 ]
 
 
@@ -97,6 +100,8 @@ DEFAULT_GROUPS: list[tuple[str, str]] = [
     ("merces-admin", "Merces Admin"),
     ("merces-manager", "Merces Manager"),
     ("scriptum-admin", "Scriptum Admin"),
+    ("alumni-admin", "Alumni Admin"),
+    ("alumni-manager", "Alumni Manager"),
 ]
 
 
@@ -215,11 +220,6 @@ class Member(Base):
     # it as a linked profile in the custom profile field it's pushed into (slack_profile.py).
     parent_guardian_1: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     parent_guardian_2: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    # Calendar year a senior graduated. Auto-set by the Yearly Grade Increase action the
-    # moment it bumps a senior to alumni — not backfilled for alumni who graduated before
-    # this field existed, since there's no reliable historical record of when past bumps
-    # ran. Admins can still enter it by hand (edit form / CSV import) to backfill those.
-    graduation_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # Auto-incremented by the yearly tenure job (services/scheduler.py) for every member
     # active on January 31. Not role-gated — applies to students and mentors alike.
     # Hand-editable (form / CSV import) to backfill real tenure for members who predate
@@ -291,50 +291,6 @@ class AuthRequest(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
     member: Mapped[Optional["Member"]] = relationship("Member")
-
-
-class GraduationSurveyStatus(str, enum.Enum):
-    """State of one post-graduation survey. `sent` means the intro DM (with the "Fill
-    out quick survey" button) went out but the modal hasn't been submitted yet;
-    `completed` means the student submitted it. There's no `expired`/`denied` like
-    `AuthStatus` — this is a single best-effort round trip, not a security challenge."""
-    sent = "sent"
-    completed = "completed"
-
-
-class GraduationSurvey(Base):
-    """One post-graduation survey, created the moment the Yearly Grade Increase action
-    (`/admin/members/bump-grades`) bumps a senior to alumni with a `slack_user_id` on
-    file. Mirrors `AuthRequest`'s `slack_channel_id`/`slack_message_ts` shape (needed to
-    edit the DM in place once answered), but is a single Slack modal round trip rather
-    than a two-button state machine, so there's no nonce/expiry.
-
-    `slack_channel_id`/`slack_message_ts` are null when the DM send itself failed (no
-    Slack id, no bot token, or a Slack API error) — the row is still created so the
-    graduation event isn't silently unrecorded, even though there's no way to retry the
-    send today. `contact_email` is only ever set when `stay_in_touch` is true.
-    """
-    __tablename__ = "graduation_surveys"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    member_id: Mapped[int] = mapped_column(Integer, ForeignKey("members.id"), nullable=False)
-    status: Mapped[GraduationSurveyStatus] = mapped_column(
-        SAEnum(GraduationSurveyStatus), nullable=False, default=GraduationSurveyStatus.sent
-    )
-    slack_channel_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    slack_message_ts: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-
-    destination: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    field_of_study: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    stay_in_touch: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
-    contact_email: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow
-    )
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-
-    member: Mapped["Member"] = relationship("Member")
 
 
 class AuthThrottle(Base):

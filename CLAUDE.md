@@ -94,15 +94,14 @@ app/
     admin.py         # SSO(+break-glass password)-protected management UI
     api.py           # Read-only JSON API (X-API-Key protected) — the sync contract
     sso.py           # SSO endpoints: authorize / status / complete / logout
-    slack.py         # Inbound Slack interactivity — SSO Approve/Deny clicks, graduation
-                     # survey button + modal submission
+    slack.py         # Inbound Slack interactivity — SSO Approve/Deny clicks
     slack_dispatch.py # /slack/dispatch — shared interactivity relay (see below)
   services/
     members.py       # member_code generation + JSON serializers (shared by API + admin)
     username.py      # SSO username generation (last.first) + collision handling
     sso.py           # mw_sso cookie mint/verify + device cookie + return_to allow-list
     slack_auth.py    # Outbound SSO challenge DM (Approve/Deny) + message update/delete
-    graduation_survey.py # Outbound post-graduation survey DM + its Block Kit modal
+    alumni_push.py   # Outbound one-time graduation event -> the Alumni app
     throttle.py      # SSO login rate limit / exponential backoff
     backup.py        # SQLite snapshot backup + staged restore (VACUUM INTO)
     scheduler.py     # APScheduler: nightly backup, SSO DM cleanup sweep
@@ -128,29 +127,31 @@ link and is **unique when set**.
 
 ### Members are unified
 Students and mentors are one `members` table discriminated by `role` (`MemberRole`).
-Team and focus group are nullable FKs. `grade` (`StudentGrade` enum), `parent_guardian_1/2`,
-and `graduation_year` live on every row but app logic gates them to the right role.
+Team and focus group are nullable FKs. `grade` (`StudentGrade` enum) and
+`parent_guardian_1/2` live on every row but app logic gates them to the right role.
 `parent_guardian_1/2` are strictly student-only — cleared the moment a member's role
 becomes mentor (in the create/edit routes and CSV import) — and hold the guardian's own
 Slack user ID (e.g. `U01ABC123`), not their name; see "Slack profile sync" below for why.
-`grade` and `graduation_year`, by contrast, are **not** cleared on a student->mentor role
-switch: a former student who becomes a mentor (a common FRC pattern — alumni returning to
-mentor) keeps their grade/graduation history rather than losing it the instant their role
-flips. They're also directly settable on a mentor row (form or CSV) for the same reason —
-e.g. backfilling a longtime mentor who's also a program alum. The member detail modal
-(`templates/admin/members.html`) shows Grade/Graduation Year for a mentor only when
-actually set, so an ordinary mentor's card isn't cluttered with empty rows. There is no
-mentor "lead" flag (removed —
-Tempus has its own `is_lead` for escalation DMs, but it's local to Tempus's own Mentor
-table, not synced from Legion). Soft-delete via `is_active` + `archived_at`, matching the
-siblings. The **Yearly Grade
-Increase** admin action (`/admin/members/bump-grades`) walks `GRADE_ORDER`; a senior
-graduates to `alumni`, is archived, and gets `graduation_year` set to the current
-calendar year — deliberately **not** auto-backfilled for alumni who graduated before
-this field existed (no reliable record of when past bumps ran), though an admin can
-enter it by hand via the edit form or CSV import. `grade` and `graduation_year` are
-exposed on the read API; guardian IDs are deliberately **not** (PII, and no consumer
-needs them).
+`grade`, by contrast, is **not** cleared on a student->mentor role switch: a former
+student who becomes a mentor (a common FRC pattern — alumni returning to mentor) keeps
+their grade rather than losing it the instant their role flips. It's also directly
+settable on a mentor row (form or CSV) for the same reason. The member detail modal
+(`templates/admin/members.html`) shows Grade for a mentor only when actually set, so an
+ordinary mentor's card isn't cluttered with an empty row. There is no mentor "lead" flag
+(removed — Tempus has its own `is_lead` for escalation DMs, but it's local to Tempus's
+own Mentor table, not synced from Legion). Soft-delete via `is_active` + `archived_at`,
+matching the siblings.
+
+`StudentGrade` has no terminal "alumni" value — Legion tracks active students only. The
+**Yearly Grade Increase** admin action (`/admin/members/bump-grades`) walks
+`GRADE_ORDER`; a senior is simply archived rather than advanced to a further grade, and
+`services/alumni_push.py` fires a best-effort, one-time POST to the **Alumni** app's
+`/api/graduates` at that moment (their `member_code`/name/Slack ID/team/subteam plus the
+current calendar year as their graduation year). That push — not any field stored on
+`Member` — is the only record anywhere that a given archive was a graduation rather than
+someone leaving mid-year; Legion keeps nothing else about a member once they're archived.
+`grade` is exposed on the read API; guardian IDs are deliberately **not** (PII, and no
+consumer needs them).
 
 ### Subteams & teams are data, not enums
 `subteams` and `teams` are admin-editable tables (unlike Tempus's hardcoded
@@ -246,27 +247,23 @@ before any browser starts polling. `GET /sso/pending/{nonce}` just renders the e
 unchanged and shared by both flows. See Munus's `services/legion_auth.py` for the
 consumer side.
 
-### Post-graduation survey (`models.GraduationSurvey`, `services/graduation_survey.py`)
-The Yearly Grade Increase action (`/admin/members/bump-grades`) sends a graduating
-senior (one with a `slack_user_id` on file — students with none are just skipped and
-counted, since Legion has no other contact info for them) a DM asking where they're
-headed after high school, what they're studying/their job title, and whether they'd
-like to stay in touch (with an email if so). Answers are collected via a Slack **modal**
-(`graduation_survey.survey_modal_view`), not free-text replies — nothing in this
-workspace listens to Slack message events, so a modal reuses existing interactivity
-plumbing instead of standing up new infrastructure. This is Legion's first use of
-`view_submission` (previously `/slack/interact` only ever handled `block_actions`, for
-the SSO buttons above), so **both** the button click (`grad_survey_start`) and the modal
-submit (`grad_survey_submit`) are registered in `slack_dispatch.py`'s routing tables —
-skipping either makes Slack's click/submit silently no-op. The email field is always
-shown (Block Kit can't conditionally reveal it based on the Yes/No answer without an
-extra round trip) but is required only when "stay in touch" is Yes, enforced server-side
-via Slack's `response_action: errors` shape so an incomplete submission reopens the
-modal with an inline error instead of silently dropping it. `GraduationSurvey` mirrors
-`AuthRequest`'s `slack_channel_id`/`slack_message_ts` shape (edits the DM to a "Thanks!"
-once answered) but is a single best-effort round trip with no nonce/expiry. Answers are
-DB-only for now — no admin page yet; the bump-grades summary banner shows send/skip
-counts as its only visibility.
+### Graduation is a push-event, not stored state (`services/alumni_push.py`)
+Legion used to run its own post-graduation survey (a Slack modal + a `GraduationSurvey`
+table) — that whole subsystem moved to the **Alumni** app, along with the `alumni` grade
+value and the `graduation_year` column that used to back it (see "Members are unified"
+above and the `_migration_retire_alumni_tracking` migration in `database.py`). All that's
+left here is the trigger: the Yearly Grade Increase action (`/admin/members/bump-grades`)
+calls `notify_alumni(member, graduation_year)` for every senior it archives, a best-effort
+`httpx` POST to the Alumni app's `/api/graduates` (`X-API-Key: ALUMNI_PUSH_API_KEY`)
+carrying their `member_code`/name/Slack ID/team/subteam and the current calendar year.
+Alumni takes it from there — sending its own survey, storing its own answers — Legion
+never hears back and keeps no record of any of it. The push is non-blocking (a failed
+delivery doesn't undo the archive Legion already committed) and its failure count folds
+into the bump-grades summary banner and the `member.bump_grades` audit entry's `detail`,
+so a failed push isn't silently unrecoverable — an admin can hand-add the person into
+Alumni from that record. A senior archived by the ordinary manual archive button
+(`POST /members/{id}/delete`), not this action, is never pushed anywhere — only the
+Yearly Grade Increase means "this is a graduation."
 
 ### User groups (`models.Group`, `member_user_groups`, `routers/admin.py`)
 Admin-editable authorization groups (`legion-admin`, `munus-admin`, `tempus-admin`, …),

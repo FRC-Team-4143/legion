@@ -123,9 +123,9 @@ async def test_import_sets_years_on_team(client, db):
 
 
 async def test_import_blank_years_on_team_leaves_existing_value_unchanged(client, db, make_member):
-    """Unlike graduation_year, a blank years_on_team column must NOT reset an existing
-    member's count to 0 — it's a running counter the yearly job maintains, and a
-    routine CSV re-import (e.g. to sync team assignments) shouldn't silently erase it."""
+    """A blank years_on_team column must NOT reset an existing member's count to 0 —
+    it's a running counter the yearly job maintains, and a routine CSV re-import (e.g.
+    to sync team assignments) shouldn't silently erase it."""
     await make_member(name="Kept Kim", role=MemberRole.student, team_number=4143, years_on_team=5)
     await _login(client)
     csv_text = (

@@ -68,5 +68,6 @@ async def check_sibling_apps() -> list[dict]:
         ("Colosseum", settings.colosseum_interact_url, settings.colosseum_public_url),
         # Scriptum's health route is /healthz (it predates joining the family).
         ("Scriptum", settings.scriptum_interact_url, settings.scriptum_public_url, "/healthz"),
+        ("Alumni", settings.alumni_interact_url, settings.alumni_public_url),
     ]
     return list(await asyncio.gather(*(_check_one(*a) for a in apps)))

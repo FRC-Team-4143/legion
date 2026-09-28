@@ -75,18 +75,19 @@ container port 8002. See that repo's `docker-compose.yml` and `deploy.sh`.
 
 ## Student metadata
 
-Students carry a **Grade** (Junior High → Freshman → Sophomore → Junior → Senior →
-Alumni) and up to two **Parent/Guardian** Slack user IDs (the guardian's own Slack
-account, not their name). Guardians are student-only — cleared the moment someone's role
-becomes mentor. **Grade** and **Graduation Year** are not: a former student who becomes a
-mentor keeps them, so a returning alumnus who's now mentoring still shows their grade
-history instead of losing it on the role switch. Guardian IDs are **not** exposed on the
-read API; `grade` and `graduation_year` are. The
-Members page has a **Yearly Grade Increase** button that advances every active student
-one grade; seniors graduate to **Alumni**, are archived, and have **Graduation Year**
-set to the current calendar year. Graduation year is *not* auto-backfilled for alumni
-who graduated before this field existed — an admin can set it by hand (edit form or CSV
-import) if they want that historic record.
+Students carry a **Grade** (Junior High → Freshman → Sophomore → Junior → Senior) and up
+to two **Parent/Guardian** Slack user IDs (the guardian's own Slack account, not their
+name). Guardians are student-only — cleared the moment someone's role becomes mentor.
+**Grade** is not: a former student who becomes a mentor keeps it, so a mentor who's a
+returning student still shows their grade instead of losing it on the role switch.
+Guardian IDs are **not** exposed on the read API; `grade` is. The Members page has a
+**Yearly Grade Increase** button that advances every active student one grade; a senior
+is simply archived rather than advanced further — Legion tracks active students only, so
+it keeps no "alumni" grade or graduation year of its own. Instead it fires a one-time,
+best-effort push to the separate **Alumni** app for every senior it archives (their name,
+Legion identity, team/subteam, and this calendar year), which owns everything about a
+person from graduation onward, including its own post-graduation survey. See its docs
+for details; Legion's only remaining role is that push (`app/services/alumni_push.py`).
 
 Every member, student or mentor, also carries **Years on Team** — a running tenure
 counter, not role-gated. A scheduled job (`app/services/scheduler.py`) increments it by
@@ -114,8 +115,7 @@ must be an existing team), `subteam` (optional, a subteam slug), `slack_user_id`
 (optional, unique), `grade` (optional —
 a grade name like `Sophomore`; also settable on a mentor row, see "Student metadata"
 above), `parent_guardian_1` / `parent_guardian_2` (optional,
-students only — the guardian's Slack `U...` ID, not their name), `graduation_year`
-(optional — a 4-digit year; also settable on a mentor row), `years_on_team` (optional —
+students only — the guardian's Slack `U...` ID, not their name), `years_on_team` (optional —
 a whole number; settable on either role, and a blank value leaves an existing member's
 count unchanged instead of resetting it to 0). Existing members are
 matched by name (case-insensitive) and updated; new

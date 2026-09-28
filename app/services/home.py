@@ -16,6 +16,7 @@ _APP_ICONS = {
     "Merces": "bi-gift",
     "Colosseum": "bi-binoculars",
     "Scriptum": "bi-code-slash",
+    "Alumni": "bi-mortarboard",
 }
 _PERSONAL_ICONS = {
     "Tempus": "bi-stopwatch",
@@ -52,6 +53,9 @@ _APP_COMMANDS: dict[str, list[tuple[str, str]]] = {
     ],
     "Merces": [
         ("/merces", "Check your balance and open the rewards store"),
+    ],
+    "Alumni": [
+        ("/alumni", "Get a one-tap link to your survey"),
     ],
 }
 
@@ -176,6 +180,22 @@ def tiles_for(identity: dict) -> list[dict]:
             "app": "Scriptum", "tier": "Coding",
             "url": f"{settings.scriptum_public_url}/", "icon": _PERSONAL_ICONS["Scriptum"], "kind": "personal",
         })
+
+    if settings.alumni_public_url:
+        # Staff-only — Alumni has no personal tile here, since the people it's about are
+        # by definition no longer active Legion members and never get a signed-in home
+        # page to see a tile on in the first place. They reach Alumni via the magic link
+        # in their graduation DM instead (see the Alumni app's own services/survey.py).
+        if "alumni-admin" in groups:
+            tiles.append({
+                "app": "Alumni", "tier": "Admin",
+                "url": f"{settings.alumni_public_url}/admin", "icon": _APP_ICONS["Alumni"], "kind": "staff",
+            })
+        elif "alumni-manager" in groups:
+            tiles.append({
+                "app": "Alumni", "tier": "Manager",
+                "url": f"{settings.alumni_public_url}/admin", "icon": _APP_ICONS["Alumni"], "kind": "staff",
+            })
 
     return tiles
 
