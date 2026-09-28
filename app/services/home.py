@@ -14,12 +14,14 @@ _APP_ICONS = {
     "Munus": "bi-heart",
     "Virtus": "bi-flag",
     "Merces": "bi-gift",
+    "Colosseum": "bi-binoculars",
 }
 _PERSONAL_ICONS = {
     "Tempus": "bi-stopwatch",
     "Munus": "bi-clipboard-check",
     "Virtus": "bi-graph-up-arrow",
     "Merces": "bi-coin",
+    "Colosseum": "bi-binoculars",
 }
 
 # Each app's registered Slack slash commands, paired with a short description (see each
@@ -151,6 +153,14 @@ def tiles_for(identity: dict) -> list[dict]:
                 "app": "Merces", "tier": "My Balance",
                 "url": f"{settings.merces_public_url}/me", "icon": _PERSONAL_ICONS["Merces"], "kind": "personal",
             })
+
+    # Colosseum has no admin tier and no groups: a member's team_number is their workspace,
+    # and Colosseum refuses anyone without one, so that's the only thing gating the tile.
+    if settings.colosseum_public_url and identity.get("team_number"):
+        tiles.append({
+            "app": "Colosseum", "tier": "Scouting",
+            "url": settings.colosseum_public_url, "icon": _PERSONAL_ICONS["Colosseum"], "kind": "personal",
+        })
 
     return tiles
 

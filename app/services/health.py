@@ -63,5 +63,6 @@ async def check_sibling_apps() -> list[dict]:
         ("Munus", settings.munus_interact_url, settings.munus_public_url),
         ("Virtus", settings.virtus_interact_url, settings.virtus_public_url),
         ("Merces", settings.merces_interact_url, settings.merces_public_url),
+        ("Colosseum", settings.colosseum_interact_url, settings.colosseum_public_url),
     ]
     return list(await asyncio.gather(*(_check_one(*a) for a in apps)))
