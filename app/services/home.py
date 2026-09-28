@@ -171,7 +171,7 @@ def tiles_for(identity: dict) -> list[dict]:
             })
         if "scriptum-user" in groups:
             tiles.append({
-                "app": "Scriptum", "tier": "Coding",
+                "app": "Scriptum", "tier": "Virtual Coding Workspace",
                 "url": f"{settings.scriptum_public_url}/", "icon": _APP_ICONS["Scriptum"], "kind": "personal",
             })
 

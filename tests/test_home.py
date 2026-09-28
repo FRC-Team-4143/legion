@@ -73,7 +73,7 @@ def test_scriptum_tiles():
         assert tiles_for(_identity(groups=["scriptum-admin"], role="student")) == []
 
         settings.scriptum_public_url = "https://scriptum.example.org"
-        coding = {"app": "Scriptum", "tier": "Coding", "url": "https://scriptum.example.org/", "icon": "bi-code-slash", "kind": "personal"}
+        coding = {"app": "Scriptum", "tier": "Virtual Coding Workspace", "url": "https://scriptum.example.org/", "icon": "bi-code-slash", "kind": "personal"}
         admin = {"app": "Scriptum", "tier": "Admin", "url": "https://scriptum.example.org/admin/", "icon": "bi-code-slash", "kind": "staff"}
         # Invitation-only: no Coding tile without scriptum-user, whatever the role.
         assert tiles_for(_identity(role="student")) == []
