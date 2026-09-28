@@ -15,6 +15,7 @@ _APP_ICONS = {
     "Virtus": "bi-flag",
     "Merces": "bi-gift",
     "Colosseum": "bi-binoculars",
+    "Scriptum": "bi-code-slash",
 }
 _PERSONAL_ICONS = {
     "Tempus": "bi-stopwatch",
@@ -22,6 +23,7 @@ _PERSONAL_ICONS = {
     "Virtus": "bi-graph-up-arrow",
     "Merces": "bi-coin",
     "Colosseum": "bi-binoculars",
+    "Scriptum": "bi-code-square",
 }
 
 # Each app's registered Slack slash commands, paired with a short description (see each
@@ -160,6 +162,19 @@ def tiles_for(identity: dict) -> list[dict]:
         tiles.append({
             "app": "Colosseum", "tier": "Scouting",
             "url": settings.colosseum_public_url, "icon": _PERSONAL_ICONS["Colosseum"], "kind": "personal",
+        })
+
+    # Scriptum gives every signed-in member their own coding workspace (its "/" sends
+    # them straight to it), so the personal tile isn't role- or group-gated.
+    if settings.scriptum_public_url:
+        if "scriptum-admin" in groups:
+            tiles.append({
+                "app": "Scriptum", "tier": "Admin",
+                "url": f"{settings.scriptum_public_url}/admin/", "icon": _APP_ICONS["Scriptum"], "kind": "staff",
+            })
+        tiles.append({
+            "app": "Scriptum", "tier": "Coding",
+            "url": f"{settings.scriptum_public_url}/", "icon": _PERSONAL_ICONS["Scriptum"], "kind": "personal",
         })
 
     return tiles

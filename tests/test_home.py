@@ -66,6 +66,25 @@ def test_colosseum_tile_for_any_member_with_a_team():
         settings.colosseum_public_url = original
 
 
+def test_scriptum_tiles():
+    original = settings.scriptum_public_url
+    try:
+        settings.scriptum_public_url = ""
+        assert tiles_for(_identity(groups=["scriptum-admin"], role="student")) == []
+
+        settings.scriptum_public_url = "https://scriptum.example.org"
+        coding = {"app": "Scriptum", "tier": "Coding", "url": "https://scriptum.example.org/", "icon": "bi-code-square", "kind": "personal"}
+        # Every signed-in member gets a workspace, whatever their role or groups.
+        assert tiles_for(_identity(role="student")) == [coding]
+        assert tiles_for(_identity(role="mentor")) == [coding]
+        assert tiles_for(_identity(groups=["scriptum-admin"])) == [
+            {"app": "Scriptum", "tier": "Admin", "url": "https://scriptum.example.org/admin/", "icon": "bi-code-slash", "kind": "staff"},
+            coding,
+        ]
+    finally:
+        settings.scriptum_public_url = original
+
+
 def test_tempus_manager_tile():
     original = settings.tempus_public_url
     try:

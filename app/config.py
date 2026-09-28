@@ -128,6 +128,9 @@ class Settings(BaseSettings):
     merces_interact_url: str = "http://merces:8004/slack/interact"
     # Colosseum likewise registers no interactive components — same rationale as Virtus above.
     colosseum_interact_url: str = "http://colosseum:8005/slack/interact"
+    # Scriptum has no Slack components either; this exists only so services/health.py
+    # can derive its internal address (the apps-infra service is `scriptum`, port 4000).
+    scriptum_interact_url: str = "http://scriptum:4000/slack/interact"
 
     # ── Home page app launcher ──────────────────────────────────────────────────
     # Public URLs for the sibling apps' tiles on Legion's signed-in home page ("/").
@@ -139,6 +142,7 @@ class Settings(BaseSettings):
     virtus_public_url: str = ""
     merces_public_url: str = ""
     colosseum_public_url: str = ""
+    scriptum_public_url: str = ""
 
     @field_validator("admin_password", "session_secret", "sso_secret")
     @classmethod
