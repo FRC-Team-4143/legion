@@ -57,7 +57,7 @@ def test_colosseum_tile_for_any_member_with_a_team():
         assert tiles_for({"groups": [], "role": "student", "team_number": 4143}) == []
 
         settings.colosseum_public_url = "https://colosseum.example.org"
-        tile = {"app": "Colosseum", "tier": "Scouting", "url": "https://colosseum.example.org", "icon": "bi-binoculars", "kind": "personal"}
+        tile = {"app": "Colosseum", "tier": "Data & Planning", "url": "https://colosseum.example.org", "icon": "bi-clipboard-data", "kind": "personal"}
         for role in ("student", "mentor"):
             assert tiles_for({"groups": [], "role": role, "team_number": 4423}) == [tile]
         # No team_number means Colosseum would refuse them, so no tile.
@@ -247,6 +247,8 @@ def test_commands_for_lists_legion_for_a_legion_only_tile():
     sections = commands_for(tiles)
     assert [s["app"] for s in sections] == ["Legion"]
     assert sections[0]["commands"] == _APP_COMMANDS["Legion"]
+    # No personal tile of its own -> falls back to the staff icon.
+    assert sections[0]["icon"] == "bi-shield-lock"
 
 
 def test_commands_for_lists_each_app_once():
@@ -259,7 +261,9 @@ def test_commands_for_lists_each_app_once():
         sections = commands_for(tiles)
         assert [s["app"] for s in sections] == ["Tempus"]
         assert sections[0]["commands"] == _APP_COMMANDS["Tempus"]
-        assert sections[0]["icon"] == "bi-clock-history"
+        # The personal icon, not the staff one its (first) tile happens to carry —
+        # a slash command is mostly something a student runs.
+        assert sections[0]["icon"] == "bi-stopwatch"
     finally:
         settings.tempus_public_url = original
 

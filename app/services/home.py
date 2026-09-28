@@ -14,7 +14,6 @@ _APP_ICONS = {
     "Munus": "bi-heart",
     "Virtus": "bi-flag",
     "Merces": "bi-gift",
-    "Colosseum": "bi-binoculars",
     "Scriptum": "bi-code-slash",
     "Alumni": "bi-mortarboard",
 }
@@ -23,7 +22,7 @@ _PERSONAL_ICONS = {
     "Munus": "bi-clipboard-check",
     "Virtus": "bi-graph-up-arrow",
     "Merces": "bi-coin",
-    "Colosseum": "bi-binoculars",
+    "Colosseum": "bi-clipboard-data",
     "Scriptum": "bi-code-square",
 }
 
@@ -164,7 +163,7 @@ def tiles_for(identity: dict) -> list[dict]:
     # and Colosseum refuses anyone without one, so that's the only thing gating the tile.
     if settings.colosseum_public_url and identity.get("team_number"):
         tiles.append({
-            "app": "Colosseum", "tier": "Scouting",
+            "app": "Colosseum", "tier": "Data & Planning",
             "url": settings.colosseum_public_url, "icon": _PERSONAL_ICONS["Colosseum"], "kind": "personal",
         })
 
@@ -207,6 +206,11 @@ def commands_for(tiles: list[dict]) -> list[dict]:
     so a launcher tile's size doesn't depend on how many commands its app has, and
     so an app with multiple tiles (e.g. both an Admin and a Shop Hours tile) only
     lists its commands once.
+
+    Icon is the app's personal-facing icon, not its staff one: a slash command is
+    mostly something a student runs, even for an app (like Tempus) that also has
+    staff-only commands in the same list. Falls back to the staff icon for an app
+    with no personal tile of its own (Legion, Alumni).
     """
     seen_apps: set[str] = set()
     sections: list[dict] = []
@@ -215,5 +219,6 @@ def commands_for(tiles: list[dict]) -> list[dict]:
         if app in seen_apps or app not in _APP_COMMANDS:
             continue
         seen_apps.add(app)
-        sections.append({"app": app, "icon": _APP_ICONS[app], "commands": _APP_COMMANDS[app]})
+        icon = _PERSONAL_ICONS.get(app, _APP_ICONS[app])
+        sections.append({"app": app, "icon": icon, "commands": _APP_COMMANDS[app]})
     return sections

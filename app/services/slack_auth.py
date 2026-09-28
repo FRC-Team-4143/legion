@@ -41,7 +41,7 @@ _APP_LABELS = {
     "munus": "Munus (volunteer hours)",
     "virtus": "Virtus (goals / reviews)",
     "merces": "Merces (student rewards)",
-    "colosseum": "Colosseum (scouting)",
+    "colosseum": "Colosseum (data & planning)",
     "scriptum": "Scriptum (coding lessons)",
     "alumni": "Alumni (graduate directory)",
     "legion": "Legion (roster / SSO)",
