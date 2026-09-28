@@ -5,25 +5,18 @@ Home page — the signed-in member's personalized "app launcher" landing page at
 """
 from app.config import settings
 
-# One icon per app for its staff (admin/manager) tiles, and a separate icon for
-# that app's personal-dashboard tile if it has one — a single explicit table
-# instead of re-typing a Bootstrap Icons class at each call site below.
+# One icon per app, shared by its staff (admin/manager) tiles, its personal-dashboard
+# tile, and its Slack Commands section — a single explicit table instead of re-typing
+# a Bootstrap Icons class at each call site below.
 _APP_ICONS = {
     "Legion": "bi-shield-lock",
-    "Tempus": "bi-clock-history",
+    "Tempus": "bi-stopwatch",
     "Munus": "bi-heart",
     "Virtus": "bi-flag",
     "Merces": "bi-gift",
+    "Colosseum": "bi-clipboard-data",
     "Scriptum": "bi-code-slash",
     "Alumni": "bi-mortarboard",
-}
-_PERSONAL_ICONS = {
-    "Tempus": "bi-stopwatch",
-    "Munus": "bi-clipboard-check",
-    "Virtus": "bi-graph-up-arrow",
-    "Merces": "bi-coin",
-    "Colosseum": "bi-clipboard-data",
-    "Scriptum": "bi-code-square",
 }
 
 # Each app's registered Slack slash commands, paired with a short description (see each
@@ -93,7 +86,7 @@ def tiles_for(identity: dict) -> list[dict]:
         # mentor), not gated on a role like Munus's student-only tile below.
         tiles.append({
             "app": "Tempus", "tier": "Shop Hours",
-            "url": f"{settings.tempus_public_url}/me", "icon": _PERSONAL_ICONS["Tempus"], "kind": "personal",
+            "url": f"{settings.tempus_public_url}/me", "icon": _APP_ICONS["Tempus"], "kind": "personal",
         })
 
     if settings.munus_public_url:
@@ -110,14 +103,14 @@ def tiles_for(identity: dict) -> list[dict]:
         if role == "student":
             tiles.append({
                 "app": "Munus", "tier": "Volunteer Hours",
-                "url": f"{settings.munus_public_url}/me", "icon": _PERSONAL_ICONS["Munus"], "kind": "personal",
+                "url": f"{settings.munus_public_url}/me", "icon": _APP_ICONS["Munus"], "kind": "personal",
             })
         elif role == "mentor":
             # Mentors have no /me (student-only) — send them to the opportunities list
             # instead, where they can see who's signed up for each shift (read-only).
             tiles.append({
                 "app": "Munus", "tier": "Opportunities",
-                "url": f"{settings.munus_public_url}/opportunities", "icon": _PERSONAL_ICONS["Munus"], "kind": "personal",
+                "url": f"{settings.munus_public_url}/opportunities", "icon": _APP_ICONS["Munus"], "kind": "personal",
             })
 
     if settings.virtus_public_url:
@@ -136,7 +129,7 @@ def tiles_for(identity: dict) -> list[dict]:
         # so a mentor's "reviews I owe" list lives behind this tile, not the Admin one.
         tiles.append({
             "app": "Virtus", "tier": "Goals & Reviews",
-            "url": f"{settings.virtus_public_url}/me", "icon": _PERSONAL_ICONS["Virtus"], "kind": "personal",
+            "url": f"{settings.virtus_public_url}/me", "icon": _APP_ICONS["Virtus"], "kind": "personal",
         })
 
     if settings.merces_public_url:
@@ -156,7 +149,7 @@ def tiles_for(identity: dict) -> list[dict]:
         if role == "student":
             tiles.append({
                 "app": "Merces", "tier": "My Balance",
-                "url": f"{settings.merces_public_url}/me", "icon": _PERSONAL_ICONS["Merces"], "kind": "personal",
+                "url": f"{settings.merces_public_url}/me", "icon": _APP_ICONS["Merces"], "kind": "personal",
             })
 
     # Colosseum has no admin tier and no groups: a member's team_number is their workspace,
@@ -164,7 +157,7 @@ def tiles_for(identity: dict) -> list[dict]:
     if settings.colosseum_public_url and identity.get("team_number"):
         tiles.append({
             "app": "Colosseum", "tier": "Data & Planning",
-            "url": settings.colosseum_public_url, "icon": _PERSONAL_ICONS["Colosseum"], "kind": "personal",
+            "url": settings.colosseum_public_url, "icon": _APP_ICONS["Colosseum"], "kind": "personal",
         })
 
     # Scriptum gives every signed-in member their own coding workspace (its "/" sends
@@ -177,7 +170,7 @@ def tiles_for(identity: dict) -> list[dict]:
             })
         tiles.append({
             "app": "Scriptum", "tier": "Coding",
-            "url": f"{settings.scriptum_public_url}/", "icon": _PERSONAL_ICONS["Scriptum"], "kind": "personal",
+            "url": f"{settings.scriptum_public_url}/", "icon": _APP_ICONS["Scriptum"], "kind": "personal",
         })
 
     if settings.alumni_public_url:
@@ -206,11 +199,6 @@ def commands_for(tiles: list[dict]) -> list[dict]:
     so a launcher tile's size doesn't depend on how many commands its app has, and
     so an app with multiple tiles (e.g. both an Admin and a Shop Hours tile) only
     lists its commands once.
-
-    Icon is the app's personal-facing icon, not its staff one: a slash command is
-    mostly something a student runs, even for an app (like Tempus) that also has
-    staff-only commands in the same list. Falls back to the staff icon for an app
-    with no personal tile of its own (Legion, Alumni).
     """
     seen_apps: set[str] = set()
     sections: list[dict] = []
@@ -219,6 +207,5 @@ def commands_for(tiles: list[dict]) -> list[dict]:
         if app in seen_apps or app not in _APP_COMMANDS:
             continue
         seen_apps.add(app)
-        icon = _PERSONAL_ICONS.get(app, _APP_ICONS[app])
-        sections.append({"app": app, "icon": icon, "commands": _APP_COMMANDS[app]})
+        sections.append({"app": app, "icon": _APP_ICONS[app], "commands": _APP_COMMANDS[app]})
     return sections
