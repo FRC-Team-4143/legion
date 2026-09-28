@@ -43,7 +43,7 @@ def test_tempus_tiles_require_configured_public_url():
         settings.tempus_public_url = "https://tempus.example.org"
         tiles = tiles_for(_identity(groups=["tempus-admin"]))
         assert tiles == [
-            {"app": "Tempus", "tier": "Admin", "url": "https://tempus.example.org/admin", "icon": "bi-clock-history", "kind": "staff"},
+            {"app": "Tempus", "tier": "Admin", "url": "https://tempus.example.org/admin", "icon": "bi-stopwatch", "kind": "staff"},
             {"app": "Tempus", "tier": "Shop Hours", "url": "https://tempus.example.org/me", "icon": "bi-stopwatch", "kind": "personal"},
         ]
     finally:
@@ -73,7 +73,7 @@ def test_scriptum_tiles():
         assert tiles_for(_identity(groups=["scriptum-admin"], role="student")) == []
 
         settings.scriptum_public_url = "https://scriptum.example.org"
-        coding = {"app": "Scriptum", "tier": "Coding", "url": "https://scriptum.example.org/", "icon": "bi-code-square", "kind": "personal"}
+        coding = {"app": "Scriptum", "tier": "Coding", "url": "https://scriptum.example.org/", "icon": "bi-code-slash", "kind": "personal"}
         # Every signed-in member gets a workspace, whatever their role or groups.
         assert tiles_for(_identity(role="student")) == [coding]
         assert tiles_for(_identity(role="mentor")) == [coding]
@@ -92,7 +92,7 @@ def test_tempus_manager_tile():
 
         manager_tiles = tiles_for(_identity(groups=["tempus-manager"]))
         assert manager_tiles == [
-            {"app": "Tempus", "tier": "Manager", "url": "https://tempus.example.org/admin", "icon": "bi-clock-history", "kind": "staff"},
+            {"app": "Tempus", "tier": "Manager", "url": "https://tempus.example.org/admin", "icon": "bi-stopwatch", "kind": "staff"},
             {"app": "Tempus", "tier": "Shop Hours", "url": "https://tempus.example.org/me", "icon": "bi-stopwatch", "kind": "personal"},
         ]
 
@@ -134,7 +134,7 @@ def test_munus_admin_and_manager_tiles():
             },
             {
                 "app": "Munus", "tier": "Opportunities",
-                "url": "https://munus.example.org/opportunities", "icon": "bi-clipboard-check", "kind": "personal",
+                "url": "https://munus.example.org/opportunities", "icon": "bi-heart", "kind": "personal",
             },
         ]
 
@@ -146,7 +146,7 @@ def test_munus_admin_and_manager_tiles():
             },
             {
                 "app": "Munus", "tier": "Opportunities",
-                "url": "https://munus.example.org/opportunities", "icon": "bi-clipboard-check", "kind": "personal",
+                "url": "https://munus.example.org/opportunities", "icon": "bi-heart", "kind": "personal",
             },
         ]
     finally:
@@ -163,7 +163,7 @@ def test_munus_student_portal_tile():
         tiles = tiles_for(_identity(role="student"))
         assert tiles == [{
             "app": "Munus", "tier": "Volunteer Hours",
-            "url": "https://munus.example.org/me", "icon": "bi-clipboard-check", "kind": "personal",
+            "url": "https://munus.example.org/me", "icon": "bi-heart", "kind": "personal",
         }]
 
         # A student who's also a munus-manager gets both tiles independently.
@@ -185,7 +185,7 @@ def test_munus_mentor_opportunities_tile():
         tiles = tiles_for(_identity(role="mentor"))
         assert tiles == [{
             "app": "Munus", "tier": "Opportunities",
-            "url": "https://munus.example.org/opportunities", "icon": "bi-clipboard-check", "kind": "personal",
+            "url": "https://munus.example.org/opportunities", "icon": "bi-heart", "kind": "personal",
         }]
 
         # A mentor who's also a munus-manager gets both tiles independently.
