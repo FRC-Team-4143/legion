@@ -32,10 +32,10 @@ def _internal_base_url(interact_url: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
-async def _ping(name: str, internal_url: str, public_url: str) -> dict:
+async def _ping(name: str, internal_url: str, public_url: str, health_path: str = "/health") -> dict:
     start = time.monotonic()
     try:
-        resp = await _client.get(f"{internal_url}/health")
+        resp = await _client.get(f"{internal_url}{health_path}")
         latency_ms = round((time.monotonic() - start) * 1000)
         if resp.status_code == 200:
             return {"name": name, "status": "ok", "latency_ms": latency_ms, "public_url": public_url}
@@ -49,10 +49,12 @@ async def _ping(name: str, internal_url: str, public_url: str) -> dict:
         return {"name": name, "status": "down", "detail": str(e) or type(e).__name__, "public_url": public_url}
 
 
-async def _check_one(name: str, interact_url: str, public_url: str) -> dict:
+async def _check_one(
+    name: str, interact_url: str, public_url: str, health_path: str = "/health"
+) -> dict:
     if not public_url:
         return {"name": name, "status": "not_configured", "public_url": ""}
-    return await _ping(name, _internal_base_url(interact_url), public_url)
+    return await _ping(name, _internal_base_url(interact_url), public_url, health_path)
 
 
 async def check_sibling_apps() -> list[dict]:
@@ -64,5 +66,7 @@ async def check_sibling_apps() -> list[dict]:
         ("Virtus", settings.virtus_interact_url, settings.virtus_public_url),
         ("Merces", settings.merces_interact_url, settings.merces_public_url),
         ("Colosseum", settings.colosseum_interact_url, settings.colosseum_public_url),
+        # Scriptum's health route is /healthz (it predates joining the family).
+        ("Scriptum", settings.scriptum_interact_url, settings.scriptum_public_url, "/healthz"),
     ]
     return list(await asyncio.gather(*(_check_one(*a) for a in apps)))

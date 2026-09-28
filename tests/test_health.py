@@ -23,6 +23,7 @@ async def test_check_sibling_apps_reports_not_configured_when_no_public_url():
         "Tempus": "not_configured", "Munus": "not_configured",
         "Virtus": "not_configured", "Merces": "not_configured",
         "Colosseum": "not_configured",
+        "Scriptum": "not_configured",
     }
 
 
@@ -44,6 +45,27 @@ async def test_check_sibling_apps_ok(monkeypatch):
     assert by_name["Tempus"]["public_url"] == "https://tempus.example.org"
     assert isinstance(by_name["Tempus"]["latency_ms"], int)
     assert by_name["Munus"]["status"] == "ok"
+
+
+async def test_scriptum_is_checked_at_healthz(monkeypatch):
+    """Scriptum's health route is /healthz; every other sibling keeps /health."""
+    monkeypatch.setattr(settings, "tempus_public_url", "https://tempus.example.org")
+    monkeypatch.setattr(settings, "scriptum_public_url", "https://scriptum.example.org")
+    requested: list[str] = []
+
+    class _FakeResponse:
+        status_code = 200
+
+    async def _fake_get(url, **kwargs):
+        requested.append(url)
+        return _FakeResponse()
+
+    monkeypatch.setattr(health_mod._client, "get", _fake_get)
+
+    results = await health_mod.check_sibling_apps()
+    assert {r["name"]: r["status"] for r in results}["Scriptum"] == "ok"
+    assert "http://scriptum:4000/healthz" in requested
+    assert "http://tempus:8000/health" in requested
 
 
 async def test_check_sibling_apps_down_on_connect_error(monkeypatch):
