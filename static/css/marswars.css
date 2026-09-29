@@ -1,0 +1,181 @@
+/*
+ * MARS/WARS shared app styles (Bootstrap 5.3 + Bootstrap Icons, dark theme).
+ *
+ * Canonical copy: apps-infra/design/marswars.css. Every Jinja app vendors this
+ * file unchanged as static/css/marswars.css - edit it HERE, then run
+ * apps-infra/design/sync.sh to copy it out (sync.sh --check reports drift).
+ * App-specific rules belong in that app's own <style> block, after the link.
+ *
+ * Reference: Legion, Tempus, and Munus. See apps-infra/design/README.md.
+ */
+
+/* ---------- Palette ---------- */
+:root,
+[data-bs-theme="dark"] {
+  --mw-bg: #0a0a0a;             /* page */
+  --mw-surface: #111111;        /* cards, sidebar, navbar */
+  --mw-surface-raised: #1a0f0f; /* card headers, table headers, hover rows */
+  --mw-input-bg: #0d0d0d;
+  --mw-border: #2a1a1a;
+  --mw-row-border: #1e1010;
+  --mw-text: #f0e8e8;
+  --mw-muted: #9a7878;
+  --mw-red: #cc2200;            /* brand + primary */
+  --mw-red-hover: #aa1c00;
+  --mw-red-active: #991900;
+  --mw-link: #e05540;
+  --mw-link-hover: #ff6644;
+
+  /* Bootstrap retheme: primary is the MARS/WARS red. */
+  --bs-primary: #cc2200;
+  --bs-primary-rgb: 204, 34, 0;
+  --bs-link-color: #e05540;
+  --bs-link-color-rgb: 224, 85, 64;
+  --bs-link-hover-color: #ff6644;
+  --bs-focus-ring-color: rgba(204, 34, 0, 0.25);
+}
+
+body {
+  background: var(--mw-bg);
+  color: var(--mw-text);
+}
+.text-muted { color: var(--mw-muted) !important; }
+
+/* ---------- Buttons ---------- */
+.btn-primary {
+  --bs-btn-bg: #cc2200;
+  --bs-btn-border-color: #cc2200;
+  --bs-btn-hover-bg: #aa1c00;
+  --bs-btn-hover-border-color: #aa1c00;
+  --bs-btn-active-bg: #991900;
+  --bs-btn-active-border-color: #991900;
+  --bs-btn-focus-shadow-rgb: 204, 34, 0;
+}
+.btn-outline-primary {
+  --bs-btn-color: #e05540;
+  --bs-btn-border-color: #cc2200;
+  --bs-btn-hover-bg: #cc2200;
+  --bs-btn-hover-border-color: #cc2200;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-active-bg: #991900;
+  --bs-btn-active-border-color: #991900;
+  --bs-btn-active-color: #fff;
+  --bs-btn-focus-shadow-rgb: 204, 34, 0;
+}
+
+/* ---------- Cards ---------- */
+.card {
+  background: var(--mw-surface);
+  border: 1px solid var(--mw-border);
+  border-radius: 10px;
+  box-shadow: none !important;
+}
+.card-header {
+  background: var(--mw-surface-raised);
+  border-bottom: 1px solid var(--mw-border);
+  color: var(--mw-red);
+  font-weight: 600;
+}
+.card-body { background: var(--mw-surface); }
+
+/* ---------- Tables ---------- */
+.table {
+  --bs-table-bg: transparent;
+  --bs-table-striped-bg: transparent;
+  --bs-table-hover-bg: #1a0f0f;
+  --bs-table-border-color: #1e1010;
+  --bs-table-color: #fff;
+  color: #fff;
+}
+.table thead th,
+.table-light {
+  background: var(--mw-surface-raised) !important;
+  color: var(--mw-muted) !important;
+  border-color: var(--mw-border) !important;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.table > :not(caption) > * > * { border-bottom-color: var(--mw-row-border); }
+
+/* ---------- Forms ---------- */
+.form-control,
+.form-select {
+  /* background-color, not the background shorthand: that would also wipe the
+     chevron Bootstrap draws on .form-select as a background-image. */
+  background-color: var(--mw-input-bg);
+  border-color: var(--mw-border);
+  color: var(--mw-text);
+}
+.form-control:focus,
+.form-select:focus {
+  background-color: var(--mw-input-bg);
+  border-color: var(--mw-red);
+  color: var(--mw-text);
+  box-shadow: none;
+}
+
+/* ---------- Admin shell: left sidebar (off-canvas drawer on mobile) ---------- */
+.sidebar {
+  min-height: 100vh;
+  background: var(--mw-surface);
+  border-right: 1px solid var(--mw-border);
+  --bs-offcanvas-width: 260px;
+  --bs-offcanvas-bg: #111111;
+}
+.sidebar .nav-link { color: var(--mw-muted); }
+.sidebar .nav-link:hover,
+.sidebar .nav-link.active {
+  color: var(--mw-text);
+  background: rgba(204, 34, 0, 0.18);
+  border-radius: 6px;
+}
+.sidebar .nav-link.active { color: #fff; }
+.sidebar-brand {
+  color: var(--mw-red);
+  font-weight: 700;
+  font-size: 1.1rem;
+  font-style: italic;
+}
+
+/* ---------- Top bar: portal navbar, and the admin shell's mobile bar ---------- */
+.navbar {
+  background: var(--mw-surface);
+  border-bottom: 1px solid var(--mw-border);
+}
+.navbar-brand {
+  color: var(--mw-red) !important;
+  font-weight: 700;
+  font-style: italic;
+}
+.navbar .nav-link { color: var(--mw-muted); }
+.navbar .nav-link:hover,
+.navbar .nav-link.active { color: var(--mw-text); }
+
+/* ---------- "Limited mode" bar: a Slack quick-link session, offer a full sign-in ---------- */
+.stepup-bar {
+  background: var(--mw-surface-raised);
+  border: 1px solid rgba(204, 34, 0, 0.4);
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.stepup-bar .stepup-msg { color: var(--mw-muted); font-size: 0.9rem; flex: 1 1 240px; }
+.stepup-bar > .bi { color: var(--mw-link); }
+
+/* ---------- Sign-in / notice card (sign-in page, "sign-in unavailable") ---------- */
+.mw-signin {
+  min-height: 70vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mw-signin-card { width: 360px; max-width: 100%; }
+.mw-app-title {
+  color: var(--mw-red);
+  font-style: italic;
+  font-weight: 700;
+}
